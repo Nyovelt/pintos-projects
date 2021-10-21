@@ -1,6 +1,6 @@
 ## Task 1
 ### Mission 1: Alarm Clock 忙等待
-在 `devices/timer.c` 中有函数 `timer_sleep` 
+In `devices/timer.c` we have `timer_sleep` 
 
 ```C
 /* Sleeps for approximately TICKS timer ticks. Interrupts must
@@ -14,10 +14,23 @@ timer_sleep (int64_t ticks)
     thread_yield ();
 }
 ```
-在这个函数中， `start`记录了这个函数被调用的时间，当 `intr_get_level () == INTR_ON`，即系统启用了中断的时候（一般都启用的）进行判断。对于一个线程来说,因为不能无休无止的让它运行下去，因此需要用 ticks 限制其运行时。当 ticks 到的时候，调用 `thread_yield` 让线程休眠
+In this function， `start` will record the time when the function is called，when `intr_get_level () == INTR_ON`，where the interupt is enabled（default）。For a single thread, we can't let it run endlessly，a `tick` is needed。When `tick` is down to 0，call `thread_yield` to let the thread yield.
 
-对于 PintOS， 有 `thread_current()` 获得一个结构体，这个结构体返回了当前正在运行的 `thread` 通过查找 `stack pointer` 的方式
+For PintOS， 有 `thread_current()` to obtain a struct，which returns the current running `thread` by look up to `stack pointer`.
 
-对于 `thread_yield()`， 它首先获得了正在运行的 thread 通过 `thread_current()` 函数。如果该进程不是 `idle_thread` 即主函数 (Main Function) 则将其推入一个队列，等待下次执行。由 `schedule()` 进行下一个进程的执行。
+For `thread_yield()`， it first obtain the running thread by calling `thread_current()` 。If that thread is not `idle_thread` ,which is the main thread or Main Function, it will push it into a list，waiting to be excecuted next time。The `schedule()` will be responsible for picking which function to run next。
 
-那对于 `timer_sleep()` 函数，它传入的参数 `ticks` 是一个强制性的值，也就是会让进程休眠特定的事件，这样会带来效率低下的问题，因为在单CPU情况下，等待进程循环探测竞争条件，浪费了时间片。[1](https://zhuanlan.zhihu.com/p/101914970) 
+For `timer_sleep()` ，its input args `ticks` is a value that force the thread to wait for a certain number of time，which causes low efficiency. Under single CPU，waiting `timer_sleep()` and `scheduler()` to detect the conditions，waste the time and resources。[1](https://zhuanlan.zhihu.com/p/101914970) 
+
+To solve this issue, we should let the thread block. When interupt happens, the `block_time` will -1. If `block_time` down to 0, we will unlock the thread for upcoming schduling.
+
+So, 
+1. add `block_tick` in `.h`
+2. initialize to 0 when create thread
+3. add `check_thread_if_block()`
+4. Change `timer_interupt()`
+
+Then Mission1 is finished.
+
+### Misson 2: Priority Scheduling
+
