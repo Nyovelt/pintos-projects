@@ -1,6 +1,10 @@
 #ifndef THREADS_THREAD_H
 #define THREADS_THREAD_H
 
+#ifndef FIXED_POINT_H
+#include "fixed-point.h"
+#endif
+
 #include <debug.h>
 #include <list.h>
 #include <stdint.h>
@@ -100,6 +104,10 @@ struct thread
    struct list locks;      /* Locks holding*/
    struct lock *wait_lock; /* Lock waiting for*/
 
+   /* p1.3 */
+   int nice;
+   fixed_point_t recent_cpu;
+
 #ifdef USERPROG
    /* Owned by userprog/process.c. */
    uint32_t *pagedir; /* Page directory. */
@@ -154,7 +162,11 @@ bool compare_thread_priority(
     const struct list_elem *a, const struct list_elem *b,
     void *aux UNUSED); // The function of compare the thread
 
-#endif
+void priority_update(void);
 
-void thread_donate_priority(struct thread *t); // 优先级捐赠
-void thread_hold_lock(struct lock *lock);      // 线程获得当前锁
+/* p1.3 */
+void cpu_add_1_s(void);
+void update_load_avg_and_recent_cpu();
+void update_priority_mlfqs(struct thread *t);
+
+#endif

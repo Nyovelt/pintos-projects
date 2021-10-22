@@ -185,9 +185,6 @@ tid_t thread_create(const char *name, int priority,
   /* Set block_ticks to 0 */
   t->block_ticks = 0;
 
-  /* Set block_ticks to 0 */
-  t -> block_ticks = 0;
-
   /* Stack frame for kernel_thread(). */
   kf = alloc_frame(t, sizeof *kf);
   kf->eip = NULL;
@@ -606,11 +603,10 @@ allocate_tid(void)
 
 /* Offset of `stack' member within `struct thread'.
    Used by switch.S, which can't figure it out on its own. */
-<<<<<<< HEAD
 uint32_t thread_stack_ofs = offsetof(struct thread, stack);
 
 /* when t is running, its status is THREAD_BLOCKED.
-   After runs certain time, release it by unblock.
+   After runs certain time, release it by unblock. 
    Scheduler will hand over. */
 void check_thread_if_block(struct thread *t,
                            void *aux UNUSED)
@@ -700,20 +696,3 @@ void update_priority_mlfqs(struct thread *t)
   if (t->priority > PRI_MAX)
     t->priority = PRI_MAX;
 }
-=======
-uint32_t thread_stack_ofs = offsetof (struct thread, stack);
-
-
-/* when t is running, its status is THREAD_BLOCKED.
-   After runs certain time, release it by unblock. 
-   Scheduler will hand over. */
-void check_thread_if_block(struct thread *t,
-                           void *aux UNUSED){
-                             if (t->status == THREAD_BLOCKED && t-> block_ticks > 0 )
-                              {
-                                t -> block_ticks --;
-                                if (! t->block_ticks)
-                                  thread_unblock(t);
-                              }
-                           }
->>>>>>> aec91139f29655ad0f3e239c7d5549e90910a042
