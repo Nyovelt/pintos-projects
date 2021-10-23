@@ -1,3 +1,6 @@
 src/utils/setitimer-helper.o
 src/utils/squish-pty.o
 src/utils/squish-unix.o
+
+.cache
+compile_commands.json
