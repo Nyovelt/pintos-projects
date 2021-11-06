@@ -8,6 +8,7 @@
 
 static void syscall_handler (struct intr_frame *);
 
+static void syscall_exit (int status);
 static int syscall_write(int fd, const void *buffer, unsigned size);
 
 void
@@ -28,8 +29,11 @@ syscall_handler (struct intr_frame *f UNUSED)
       printf ("syscall halt.\n");
       break;
     case SYS_EXIT:
-      printf ("syscall exit.\n");
-      break;
+      {
+        int status = *(int *) (f->esp + 1);
+        syscall_exit (status);
+        break;
+      }
     case SYS_EXEC:
       printf ("syscall exec.\n");
       break;
@@ -53,8 +57,8 @@ syscall_handler (struct intr_frame *f UNUSED)
       break;
     case SYS_WRITE:
       {
-        int fd = *(int *) (f->esp + 1);
-        void *buffer = (char *) (*((int *) f->esp + 2));
+        int fd = *(int *) (f->esp + 1); // casting for pointer arithmetic
+        void *buffer = (void *) (*((int *) f->esp + 2)); // dereference before casting to get the contents
         unsigned size = *(unsigned *) (f->esp + 3);
 
         f->eax = syscall_write (fd, buffer, size);
@@ -72,6 +76,12 @@ syscall_handler (struct intr_frame *f UNUSED)
     default:
       printf ("unknown syscall.\n");
     }
+}
+
+static void
+syscall_exit (int status)
+{
+  thread_exit ();
 }
 
 static int
