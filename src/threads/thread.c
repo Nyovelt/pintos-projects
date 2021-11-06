@@ -183,8 +183,6 @@ thread_create (const char *name, int priority,
   init_thread (t, name, priority);
   tid = t->tid = allocate_tid ();
 
-  sema_init(&t->wait, 0);
-
   /* Stack frame for kernel_thread(). */
   kf = alloc_frame (t, sizeof *kf);
   kf->eip = NULL;
@@ -283,6 +281,7 @@ void
 thread_exit (void) 
 {
   ASSERT (!intr_context ());
+
 #ifdef USERPROG
   process_exit ();
 #endif
@@ -295,7 +294,6 @@ thread_exit (void)
   thread_current ()->status = THREAD_DYING;
   schedule ();
   NOT_REACHED ();
-  sema_up(&thread_current()->wait);
 }
 
 /* Yields the CPU.  The current thread is not put to sleep and

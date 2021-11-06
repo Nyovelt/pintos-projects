@@ -17,6 +17,7 @@
 #include "threads/palloc.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
+#include "devices/timer.h"
 
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
@@ -89,7 +90,7 @@ int
 process_wait (tid_t child_tid UNUSED) 
 {
   /* Allow child process to finish all its setup in order to check stack */
-  sema_down(&thread_current()->wait); // parent become immediately block upon waiting
+  timer_sleep(200);
   return -1;
 }
 
