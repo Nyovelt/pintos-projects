@@ -1,6 +1,7 @@
 #ifndef THREADS_THREAD_H
 #define THREADS_THREAD_H
 
+#include "threads/synch.h"
 #include <debug.h>
 #include <list.h>
 #include <stdint.h>
@@ -93,7 +94,11 @@ struct thread
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
 
+   /* For Alarm */
     uint64_t blocked_ticks;             /* The number of ticks the thread is blocked. */
+
+   /* For process_wait() */
+    struct semaphore wait;              /* Semaphore for process_wait() */
 
 #ifdef USERPROG
     /* Owned by userprog/process.c. */

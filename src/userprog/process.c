@@ -88,6 +88,8 @@ start_process (void *file_name_)
 int
 process_wait (tid_t child_tid UNUSED) 
 {
+  /* Allow child process to finish all its setup in order to check stack */
+  sema_down(&thread_current()->wait); // parent become immediately block upon waiting
   return -1;
 }
 
