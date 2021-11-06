@@ -57,8 +57,8 @@ syscall_handler (struct intr_frame *f UNUSED)
       break;
     case SYS_WRITE:
       {
-        int fd = *(int *) (f->esp + 1); // casting for pointer arithmetic
-        void *buffer = (void *) (*((int *) f->esp + 2)); // dereference before casting to get the contents
+        int fd = *(int *) (f->esp + 1); // Casting for pointer arithmetic
+        void *buffer = (void *) (*((int *) f->esp + 2)); // Dereference before casting to get the contents
         unsigned size = *(unsigned *) (f->esp + 3);
 
         f->eax = syscall_write (fd, buffer, size);
@@ -81,6 +81,7 @@ syscall_handler (struct intr_frame *f UNUSED)
 static void
 syscall_exit (int status)
 {
+  thread_current()->exit_code = status;
   thread_exit ();
 }
 

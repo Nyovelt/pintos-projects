@@ -99,6 +99,10 @@ void
 process_exit (void)
 {
   struct thread *cur = thread_current ();
+
+  /* Process termination messages */
+  printf("%s: exit(%d)\n", cur->name, cur->exit_code);
+
   uint32_t *pd;
 
   /* Destroy the current process's page directory and switch back
