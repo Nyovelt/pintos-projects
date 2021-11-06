@@ -19,6 +19,8 @@
 #include "threads/vaddr.h"
 #include "devices/timer.h"
 
+#define ARG_LIMIT 128
+
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
 
@@ -39,8 +41,18 @@ process_execute (const char *file_name)
     return TID_ERROR;
   strlcpy (fn_copy, file_name, PGSIZE);
 
+  /* Parse */
+  char *args[ARG_LIMIT];
+  char *token, *rest;
+  int i = 0;
+  for (token = strtok_r(fn_copy, " ", &rest);
+       token != NULL;
+       token = strtok_r(NULL, " ", &rest))
+    args[i++] = token;
+  args[i] = NULL;
+
   /* Create a new thread to execute FILE_NAME. */
-  tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy);
+  tid = thread_create (args[0], PRI_DEFAULT, start_process, fn_copy);
   if (tid == TID_ERROR)
     palloc_free_page (fn_copy); 
   return tid;
@@ -49,9 +61,11 @@ process_execute (const char *file_name)
 /* A thread function that loads a user process and starts it
    running. */
 static void
-start_process (void *file_name_)
+start_process (void *arg)
 {
-  char *file_name = file_name_;
+  char **args = (char **) arg;
+  /* File name is the first in args */
+  char *file_name = args[0];
   struct intr_frame if_;
   bool success;
 

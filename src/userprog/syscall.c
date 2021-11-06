@@ -57,10 +57,13 @@ syscall_handler (struct intr_frame *f UNUSED)
       break;
     case SYS_WRITE:
       {
-        int fd = *(int *) (f->esp + 1); // Casting for pointer arithmetic
-        void *buffer = (void *) (*((int *) f->esp + 2)); // Dereference before casting to get the contents
+        /* Casting for pointer arithmetic */
+        int fd = *(int *) (f->esp + 1);
+        /* Dereference before casting to get the contents */
+        void *buffer = (void *) (*((int *) f->esp + 2));
         unsigned size = *(unsigned *) (f->esp + 3);
 
+        /* Place return value in EAX register */
         f->eax = syscall_write (fd, buffer, size);
         break;
       }
