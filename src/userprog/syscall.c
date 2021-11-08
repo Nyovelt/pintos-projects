@@ -20,9 +20,10 @@ syscall_init (void)
 static void
 syscall_handler (struct intr_frame *f UNUSED)
 {
+  // int *esp = f->esp;
   if (!f->esp)
     thread_exit ();
-
+  // printf ("esp: %d", (int *) f->esp);
   switch (*(int *) f->esp)
     {
     case SYS_HALT:
@@ -30,7 +31,8 @@ syscall_handler (struct intr_frame *f UNUSED)
       break;
     case SYS_EXIT:
       {
-        int status = *(int *) (f->esp + 1);
+        // printf ("syscall SYS_EXIT.\n");
+        int status = *((int *) f->esp + 1);
         syscall_exit (status);
         break;
       }
@@ -57,11 +59,11 @@ syscall_handler (struct intr_frame *f UNUSED)
       break;
     case SYS_WRITE:
       {
-        /* Casting for pointer arithmetic */
-        int fd = *(int *) (f->esp + 1);
-        /* Dereference before casting to get the contents */
-        void *buffer = (void *) (*((int *) f->esp + 2));
-        unsigned size = *(unsigned *) (f->esp + 3);
+        // printf ("syscall WRITE.\n");
+        int fd = *((int *) f->esp + 1); // casting for pointer arithmetic
+
+        void *buffer = (void *) (*((int *) f->esp + 2)); // dereference before casting to get the contents
+        unsigned size = *((unsigned *) f->esp + 3);
 
         /* Place return value in EAX register */
         f->eax = syscall_write (fd, buffer, size);
@@ -84,7 +86,7 @@ syscall_handler (struct intr_frame *f UNUSED)
 static void
 syscall_exit (int status)
 {
-  thread_current()->exit_code = status;
+  thread_current ()->exit_code = status; // set exit status
   thread_exit ();
 }
 

@@ -19,10 +19,11 @@
 #include "threads/vaddr.h"
 #include "devices/timer.h"
 
-#define ARG_LIMIT 128
+#define ARGS_LIMIT 128
 
 static thread_func start_process NO_RETURN;
-static bool load (const char *cmd_line, void (**eip) (void), void **esp);
+static bool load (const char *cmdline, void (**eip) (void), void **esp, unsigned int argc, char **argv);
+
 
 /* Starts a new thread running a user program loaded from
    FILENAME.  The new thread may be scheduled (and may even exit)
@@ -37,12 +38,25 @@ process_execute (const char *file_name)
   /* Make a copy of FILE_NAME.
      Otherwise there's a race between the caller and load(). */
   fn_copy = palloc_get_page (0);
+
   if (fn_copy == NULL)
     return TID_ERROR;
   strlcpy (fn_copy, file_name, PGSIZE);
 
+  /* get a copy of fn_copy */
+  char *copy_of_fn_copy;
+  copy_of_fn_copy = palloc_get_page (0); // TODO: to examine
+  strlcpy (copy_of_fn_copy, fn_copy, PGSIZE);
+  /* do seperation to get the first args[0] which is REAL filename */
+  char *save_ptr;
+  char *_file_name = strtok_r (fn_copy, " ", &save_ptr);
+
+  /* do check */
+  // printf ("_file_name: %s \n", _file_name);
+  // printf ("copy_of_fn_copy: %s \n", copy_of_fn_copy);
+
   /* Create a new thread to execute FILE_NAME. */
-  tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy);
+  tid = thread_create (_file_name, PRI_DEFAULT, start_process, copy_of_fn_copy);
   if (tid == TID_ERROR)
     palloc_free_page (fn_copy); 
   return tid;
@@ -51,9 +65,29 @@ process_execute (const char *file_name)
 /* A thread function that loads a user process and starts it
    running. */
 static void
-start_process (void *file_name_)
+start_process (void *fn_copy)
 {
-  char *file_name = file_name_;
+  /* Parse */
+  char *args[ARGS_LIMIT];
+  char *token, *rest;
+  unsigned int argc = 0;
+  for (token = strtok_r (fn_copy, " ", &rest); token != NULL; token = strtok_r (NULL, " ", &rest))
+    {
+      args[argc] = token;
+      argc++;
+    }
+  args[argc] = NULL;
+  /* END Parse */
+
+  char *file_name = args[0];
+
+  /* CHECK BEGIN */
+  // for (int i = 0; i < argc; i++)
+  //   {
+  //     printf ("args[%d] : %s \n", i, args[i]);
+  //   }
+  // printf ("file_name: %s\n", file_name);
+
   struct intr_frame if_;
   bool success;
 
@@ -62,7 +96,7 @@ start_process (void *file_name_)
   if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
-  success = load (file_name, &if_.eip, &if_.esp);
+  success = load (file_name, &if_.eip, &if_.esp, argc, args);
 
   /* If load failed, quit. */
   palloc_free_page (file_name);
@@ -102,8 +136,7 @@ process_exit (void)
 {
   struct thread *cur = thread_current ();
 
-  /* Process termination messages */
-  printf("%s: exit(%d)\n", cur->name, cur->exit_code);
+  printf ("%s: exit(%d)\n", cur->name, cur->exit_code); // print exit code
 
   uint32_t *pd;
 
@@ -204,7 +237,7 @@ struct Elf32_Phdr
 #define PF_W 2          /* Writable. */
 #define PF_R 4          /* Readable. */
 
-  static bool setup_stack (void **esp, const char **argv);
+  static bool setup_stack (void **esp, unsigned int argc, char **argv);
   static bool validate_segment (const struct Elf32_Phdr *, struct file *);
   static bool load_segment (struct file *file, off_t ofs, uint8_t *upage,
                             uint32_t read_bytes, uint32_t zero_bytes,
@@ -215,7 +248,7 @@ struct Elf32_Phdr
    and its initial stack pointer into *ESP.
    Returns true if successful, false otherwise. */
   bool
-  load (const char *cmd_line, void (**eip) (void), void **esp)
+  load (const char *file_name, void (**eip) (void), void **esp, unsigned int argc, char **argv)
   {
     struct thread *t = thread_current ();
     struct Elf32_Ehdr ehdr;
@@ -230,23 +263,6 @@ struct Elf32_Phdr
       goto done;
     process_activate ();
 
-    /* Get a copy for strtok */
-    char *cmd_copy = palloc_get_page (0);
-    if (cmd_copy == NULL)
-      return TID_ERROR;
-    strlcpy (cmd_copy, cmd_line, PGSIZE);
-
-    /* Parse the filename deliminating by white spaces */
-    char *argv[ARG_LIMIT];
-    char *token, *saveptr;
-    int argc = 0;
-    for (token = strtok_r (cmd_copy, " ", &saveptr);
-         token != NULL;
-         token = strtok_r (NULL, " ", &saveptr))
-      argv[argc++] = token;
-    argv[argc] = NULL;
-
-    const char *file_name = argv[0];
     /* Open executable file. */
     file = filesys_open (file_name);
     if (file == NULL)
@@ -328,7 +344,7 @@ struct Elf32_Phdr
       }
 
     /* Set up stack. */
-    if (!setup_stack (esp, (const char **) argv))
+    if (!setup_stack (esp, argc, argv))
       goto done;
 
     /* Start address. */
@@ -340,8 +356,8 @@ struct Elf32_Phdr
     /* We arrive here whether the load is successful or not. */
     file_close (file);
     return success;
-}
-
+  }
+
 /* load() helpers. */
 
 static bool install_page (void *upage, void *kpage, bool writable);
@@ -453,7 +469,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 /* Create a minimal stack by mapping a zeroed page at the top of
    user virtual memory. */
 static bool
-setup_stack (void **esp, const char **argv)
+setup_stack (void **esp, unsigned int argc, char **argv)
 {
   uint8_t *kpage;
   bool success = false;
@@ -465,49 +481,52 @@ setup_stack (void **esp, const char **argv)
       if (success)
         {
           *esp = PHYS_BASE;
-
-          char *argv_addr[ARG_LIMIT];
-          int argc;
-          /* Write each argument on top */
-          for (argc = 0; argv[argc] != NULL; argc++)
+          /* BEGIN ESP */
+          //argv[]
+          char *argv_addr[ARGS_LIMIT];
+          for (int i = 0; i < argc; i++)
             {
-              *esp -= strlen (argv[argc]) + 1;
-              memcpy (*esp, argv[argc], strlen (argv[argc]) + 1);
-              argv_addr[argc] = *esp;
+              //printf ("%s:%d esp: %p %s\n", __FILE__, __LINE__, *esp, *esp);
+              //printf ("length: %d \n", strlen (argv[i]) + 1);
+              *esp -= (strlen (argv[i]) + 1);
+
+              //memcpy (*esp, argv[i], strlen (argv[i]) + 1);
+              strlcpy (*esp, argv[i], strlen (argv[i]) + 1);
+              argv_addr[i] = *esp;
+              //printf ("%s:%d esp: %p %s\n", __FILE__, __LINE__, *esp, *esp);
             }
+          //align
+          unsigned int t = ((unsigned int) *esp) % 4; // t stand for word_align
+          *esp -= t;
+          memset (*esp, 0, t);
+          // &argv[]
+          *esp -= sizeof (char *);
+          memset (*esp, NULL, sizeof (char *));
 
-          /* Write the necessary number of 0s to word-align to 4 bytes */
-          int word_align = (int) *esp % 4;
-          *esp -= word_align;
-          memset (*esp, 0, word_align);
-
-          /* Null pointer sentinel */
-          *esp -= sizeof (void *);
-          *(void **) *esp = NULL;
-
-          /* Write the addresses pointing to each of the arguments */
           for (int i = argc - 1; i >= 0; i--)
             {
               *esp -= sizeof (char *);
               memcpy (*esp, &argv_addr[i], sizeof (char *));
+              //printf ("%d", i);
+              //printf ("%s:%d esp: %p %s\n", __FILE__, __LINE__, *esp, *esp);
             }
-
-          /* Write the address of argv[0] */
-          char **argv0_addr = *esp;
+          // &argv
+          char **t_esp = *esp;
           *esp -= sizeof (char **);
-          memcpy (*esp, argv0_addr, sizeof (char **));
-
-          /* Write argc */
-          *esp -= sizeof(int);
+          memcpy (*esp, &t_esp, sizeof (char **));
+          // argc
+          *esp -= sizeof (int);
           memcpy (*esp, &argc, sizeof (int));
-
-          /* Write a NULL pointer as the return address */
-          *esp -= sizeof(void *);
-          memset(*esp, 0, sizeof(void *));
+          // NULL
+          *esp -= sizeof (void *);
+          memset (*esp, 0, sizeof (void *));
+          /* END ESP */
         }
       else
         palloc_free_page (kpage);
     }
+
+
   return success;
 }
 
