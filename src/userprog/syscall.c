@@ -30,6 +30,7 @@ syscall_handler (struct intr_frame *f UNUSED)
       break;
     case SYS_EXIT:
       {
+        printf ("syscall SYS_EXIT.\n");
         int status = *(int *) (f->esp + 1);
         syscall_exit (status);
         break;
@@ -57,6 +58,7 @@ syscall_handler (struct intr_frame *f UNUSED)
       break;
     case SYS_WRITE:
       {
+        printf ("syscall WRITE.\n");
         int fd = *(int *) (f->esp + 1); // casting for pointer arithmetic
         void *buffer = (void *) (*((int *) f->esp + 2)); // dereference before casting to get the contents
         unsigned size = *(unsigned *) (f->esp + 3);
