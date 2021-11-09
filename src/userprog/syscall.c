@@ -34,10 +34,10 @@ is_valid_addr (const void *addr)
 static inline void
 is_valid_ptr (const void *esp, const int offset)
 {
-  const void *ptr = esp + offset * sizeof(void *);
+  const void *ptr = esp + offset * sizeof (void *);
   /* Check the first and last bytes */
   if (!is_valid_addr (ptr) || !is_valid_addr (ptr + sizeof (void *) - 1))
-    syscall_exit(ERR);
+    syscall_exit (ERR);
 }
 
 static void
@@ -47,11 +47,11 @@ check_memory (const void *begin_addr, int size)
   for (const void *ptr = begin_addr; ptr < begin_addr + size; ptr += PGSIZE)
     {
       if (!is_valid_addr (ptr))
-        syscall_exit(ERR);
+        syscall_exit (ERR);
     }
 
   if (!is_valid_addr (begin_addr + sizeof (void *) - 1))
-    syscall_exit(ERR);
+    syscall_exit (ERR);
 }
 
 static void
