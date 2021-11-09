@@ -4,18 +4,17 @@
 #include "threads/interrupt.h"
 #include "threads/thread.h"
 
-#include "threads/vaddr.h" // is_user_addr
-#include "userprog/pagedir.h" // pagedir_get_page
+#include "threads/vaddr.h" // is_user_addr()
+#include "userprog/pagedir.h" // pagedir_get_page()
 
-#define ARGS_MAX 3
+#include "devices/shutdown.h" // shutdown_power_off()
 
 #define STDOUT 1
 #define ERR -1
 
-//void *args[ARGS_MAX];
-
 static void syscall_handler (struct intr_frame *);
 
+static void syscall_halt (void);
 static void syscall_exit (int status);
 static int syscall_write(int fd, const void *buffer, unsigned size);
 
@@ -63,7 +62,7 @@ syscall_handler (struct intr_frame *f UNUSED)
   switch (*(int *) f->esp)
     {
     case SYS_HALT:
-      printf ("syscall halt.\n");
+      syscall_halt();
       break;
     case SYS_EXIT:
       is_valid_ptr (f->esp, 1);
@@ -123,6 +122,12 @@ syscall_handler (struct intr_frame *f UNUSED)
     default:
       printf ("unknown syscall.\n");
     }
+}
+
+static void
+syscall_halt (void)
+{
+  shutdown_power_off();
 }
 
 static void
