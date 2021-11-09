@@ -28,21 +28,28 @@ syscall_init (void)
 static inline bool
 is_valid_addr (const void *addr)
 {
-  return addr && is_user_vaddr (addr) && pagedir_get_page (thread_current ()->pagedir, addr);
+  return is_user_vaddr (addr) && pagedir_get_page (thread_current ()->pagedir, addr);
+}
+
+static inline void
+is_valid_ptr (const void *esp, const int offset)
+{
+  const void *ptr = esp + offset * sizeof(void *);
+  /* Check the first and last bytes */
+  if (!is_valid_addr (ptr) || !is_valid_addr (ptr + sizeof (void *) - 1))
+    syscall_exit(ERR);
 }
 
 static void
-check_memory (const void *base, const int offset)
+check_memory (const void *begin_addr, int size)
 {
-  const void *begin_addr = base + offset * sizeof(void *);
   /* Check the entire memory slice accessed through this pointer */
-  for (const void *ptr = begin_addr; ptr < begin_addr + sizeof (void *); ptr += PGSIZE)
+  for (const void *ptr = begin_addr; ptr < begin_addr + size; ptr += PGSIZE)
     {
       if (!is_valid_addr (ptr))
         syscall_exit(ERR);
     }
 
-  /* Check remaining bytes */
   if (!is_valid_addr (begin_addr + sizeof (void *) - 1))
     syscall_exit(ERR);
 }
@@ -51,7 +58,7 @@ static void
 syscall_handler (struct intr_frame *f UNUSED)
 {
   /* First check if f->esp is a valid pointer */
-  check_memory(f->esp, 0);
+  is_valid_ptr (f->esp, 0);
 
   switch (*(int *) f->esp)
     {
@@ -59,54 +66,58 @@ syscall_handler (struct intr_frame *f UNUSED)
       printf ("syscall halt.\n");
       break;
     case SYS_EXIT:
-        check_memory(f->esp, 1);
-        int status = *((int *) f->esp + 1);
-        syscall_exit (status);
-        break;
+      is_valid_ptr (f->esp, 1);
+      int status = *((int *) f->esp + 1);
+      syscall_exit (status);
+      break;
     case SYS_EXEC:
+      is_valid_ptr (f->esp, 1);
       printf ("syscall exec.\n");
       break;
     case SYS_WAIT:
-      check_memory(f->esp, 1);
+      is_valid_ptr (f->esp, 1);
       printf ("syscall wait.\n");
       break;
     case SYS_CREATE:
-      check_memory(f->esp, 2);
+      is_valid_ptr (f->esp, 2);
       printf ("syscall create.\n");
       break;
     case SYS_REMOVE:
+      is_valid_ptr (f->esp, 1);
       printf ("syscall remove.\n");
       break;
     case SYS_OPEN:
+      is_valid_ptr (f->esp, 1);
       printf ("syscall open.\n");
       break;
     case SYS_FILESIZE:
-      check_memory(f->esp, 1);
+      is_valid_ptr (f->esp, 1);
       printf ("syscall filesize.\n");
       break;
     case SYS_READ:
-      check_memory(f->esp, 3);
+      is_valid_ptr (f->esp, 3);
       printf ("syscall read.\n");
       break;
     case SYS_WRITE:
-        check_memory(f->esp, 3);
-        int fd = *((int *) f->esp + 1);
-        void *buffer = (void *) (*((int *) f->esp + 2));
-        unsigned size = *((unsigned *) f->esp + 3);
+      is_valid_ptr (f->esp, 3);
+      int fd = *((int *) f->esp + 1);
+      void *buffer = (void *) (*((int *) f->esp + 2));
+      unsigned size = *((unsigned *) f->esp + 3);
+      check_memory (buffer, size);
 
-        /* Place return value in EAX register */
-        f->eax = syscall_write (fd, buffer, size);
-        break;
+      /* Place return value in EAX register */
+      f->eax = syscall_write (fd, buffer, size);
+      break;
     case SYS_SEEK:
-      check_memory(f->esp, 2);
+      is_valid_ptr (f->esp, 2);
       printf ("syscall seek.\n");
       break;
     case SYS_TELL:
-      check_memory(f->esp, 1);
+      is_valid_ptr (f->esp, 1);
       printf ("syscall tell.\n");
       break;
     case SYS_CLOSE:
-      check_memory(f->esp, 1);
+      is_valid_ptr (f->esp, 1);
       printf ("syscall close.\n");
       break;
     default:
