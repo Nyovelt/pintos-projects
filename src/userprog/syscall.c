@@ -22,7 +22,8 @@ static void syscall_handler (struct intr_frame *);
 
 static int
 syscall_open (const char *file);
-
+static int
+syscall_close (int fd);
 static void halt (void);
 static void exit (int status);
 static bool create (const char *file, unsigned initial_size);
@@ -122,6 +123,7 @@ syscall_handler (struct intr_frame *f UNUSED)
       lock_release (&file_lock);
       break;
     case SYS_OPEN:
+
       is_valid_ptr (f->esp, 1);
       //printf ("syscall open.\n");
       //printf ("\n SYS_OPEN: %s \n", *((char **) f->esp + 1));
@@ -156,7 +158,8 @@ syscall_handler (struct intr_frame *f UNUSED)
       break;
     case SYS_CLOSE:
       is_valid_ptr (f->esp, 1);
-      printf ("syscall close.\n");
+      //printf ("syscall close.\n");
+      f->eax = syscall_close (*((int **) f->esp + 1));
       break;
     default:
       printf ("unknown syscall.\n");
@@ -206,16 +209,22 @@ write (int fd, const void *buffer, unsigned size)
 static int
 syscall_open (const char *file)
 {
-
-
-  //printf ("\n yo \n");
-  if (!file)
+  if (file == NULL)
     return -1;
-  //printf ("file: %s\n", file);
-  // TODO: Think about the lock
-  // lock_acquire (&filesys_lock);
+
+  char *p = file;
+  while (pagedir_get_page ((void *) thread_current ()->pagedir, p) != NULL && *p != '\0')
+    p++;
+  if (pagedir_get_page ((void *) thread_current ()->pagedir, p) == NULL)
+    {
+      exit (ERR); //TODO: pass open-bad-ptr but may have side effects
+      return -1;
+    }
+
+
+  lock_acquire (&file_lock);
   struct file *f = filesys_open (file);
-  // lock_release (&filesys_lock);
+  lock_release (&file_lock);
 
   if (f == NULL)
     return -1;
@@ -227,4 +236,31 @@ syscall_open (const char *file)
   list_push_back (&t->fd_list, &fd->elem);
 
   return fd->fd;
+}
+
+static int
+syscall_close (int fd)
+{
+  struct thread *t = thread_current ();
+  lock_acquire (&file_lock);
+  for (struct list_elem *e = list_begin (&t->fd_list); e != list_end (&t->fd_list); e = list_next (e))
+    {
+      struct file_descriptor *f = list_entry (e, struct file_descriptor, elem);
+      if (f == NULL || f->fd == NULL)
+        {
+          lock_release (&file_lock);
+          return -1;
+        }
+      if (f->fd == fd)
+        {
+          list_remove (e);
+          file_close (f->file);
+          free (f);
+          lock_release (&file_lock);
+          return 0;
+        }
+    }
+  //lock_release (&file_lock);
+  lock_release (&file_lock);
+  return -1;
 }
