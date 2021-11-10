@@ -3,23 +3,25 @@
 #include <syscall-nr.h>
 #include "threads/interrupt.h"
 #include "threads/thread.h"
-
+#include "threads/synch.h"
 #include "threads/vaddr.h" // is_user_addr()
 #include "userprog/pagedir.h" // pagedir_get_page()
-
 #include "devices/shutdown.h" // shutdown_power_off()
 
 #define STDOUT 1
 #define ERR -1
+
 
 static void syscall_handler (struct intr_frame *);
 
 static void syscall_halt (void);
 static void syscall_exit (int status);
 static int syscall_write(int fd, const void *buffer, unsigned size);
+static int
+syscall_open (const char *file);
 
 void
-syscall_init (void) 
+syscall_init (void)
 {
   intr_register_int (0x30, 3, INTR_ON, syscall_handler, "syscall");
 }
@@ -87,7 +89,9 @@ syscall_handler (struct intr_frame *f UNUSED)
       break;
     case SYS_OPEN:
       is_valid_ptr (f->esp, 1);
-      printf ("syscall open.\n");
+      //printf ("syscall open.\n");
+      //printf ("\n SYS_OPEN: %s \n", *((char **) f->esp + 1));
+      f->eax = syscall_open (*((char **) f->esp + 1));
       break;
     case SYS_FILESIZE:
       is_valid_ptr (f->esp, 1);
@@ -147,4 +151,30 @@ syscall_write (int fd, const void *buffer, unsigned size)
     }
   else
     return -1;
+}
+
+static int
+syscall_open (const char *file)
+{
+
+
+  //printf ("\n yo \n");
+  if (!file)
+    return -1;
+  //printf ("file: %s\n", file);
+  // TODO: Think about the lock
+  // lock_acquire (&filesys_lock);
+  struct file *f = filesys_open (file);
+  // lock_release (&filesys_lock);
+
+  if (f == NULL)
+    return -1;
+
+  struct thread *t = thread_current ();
+  struct file_descriptor *fd = malloc (sizeof (struct file_descriptor));
+  fd->file = f;
+  fd->fd = t->next_fd++;
+  list_push_back (&t->fd_list, &fd->elem);
+
+  return fd->fd;
 }

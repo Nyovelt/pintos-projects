@@ -4,7 +4,10 @@
             "name": "Linux",
             "includePath": [
                 "${default}",
-                "${workspaceFolder}/**"
+                "${workspaceFolder}/src",
+                "${workspaceFolder}/src/lib",
+                "${workspaceFolder}/src/lib/kernel",
+                "${workspaceFolder}/src/lib/user"
             ],
             "defines": [
                 "USERPROG"

@@ -4,7 +4,7 @@
 #include <debug.h>
 #include <list.h>
 #include <stdint.h>
-
+#include "synch.h"
 /* States in a thread's life cycle. */
 enum thread_status
   {
@@ -13,6 +13,7 @@ enum thread_status
     THREAD_BLOCKED,     /* Waiting for an event to trigger. */
     THREAD_DYING        /* About to be destroyed. */
   };
+
 
 /* Thread identifier type.
    You can redefine this to whatever type you like. */
@@ -96,10 +97,23 @@ struct thread
    /* For Alarm */
     uint64_t blocked_ticks;             /* The number of ticks the thread is blocked. */
 
+
 #ifdef USERPROG
+
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
     int exit_code;
+    struct lock filesys_lock;
+    int next_fd;
+    struct list fd_list;
+
+
+    struct file_descriptor
+    {
+        struct file *file;
+        int fd;
+        struct list_elem elem;
+    };
 #endif
 
     /* Owned by thread.c. */
