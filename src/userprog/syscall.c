@@ -21,6 +21,7 @@ static void syscall_handler (struct intr_frame *);
 static void halt (void);
 static void exit (int status);
 static bool create (const char *file, unsigned initial_size);
+static bool remove (const char *file);
 static int write(int fd, const void *buffer, unsigned size);
 
 void
@@ -80,7 +81,7 @@ syscall_handler (struct intr_frame *f UNUSED)
   switch (*(int *) f->esp)
     {
     case SYS_HALT:
-      halt();
+      halt ();
       break;
     case SYS_EXIT:
       is_valid_ptr (f->esp, 1);
@@ -97,17 +98,22 @@ syscall_handler (struct intr_frame *f UNUSED)
       break;
     case SYS_CREATE:
       is_valid_ptr (f->esp, 2);
-      const char *file = (const char *) (*((int *) f->esp + 1));
+      const char *file_cr = (const char *) (*((int *) f->esp + 1));
       unsigned initial_size = *((unsigned *) f->esp + 2);
-      check_string(file);
+      check_string (file_cr);
 
-      lock_acquire(&file_lock);
-      f->eax = create(file, initial_size);
-      lock_release(&file_lock);
+      lock_acquire (&file_lock);
+      f->eax = create (file_cr, initial_size);
+      lock_release (&file_lock);
       break;
     case SYS_REMOVE:
       is_valid_ptr (f->esp, 1);
-      printf ("syscall remove.\n");
+      const char *file_rm = (const char *) (*((int *) f->esp + 1));
+      check_string (file_rm);
+
+      lock_acquire (&file_lock);
+      f->eax = remove (file_rm);
+      lock_release (&file_lock);
       break;
     case SYS_OPEN:
       is_valid_ptr (f->esp, 1);
@@ -128,9 +134,9 @@ syscall_handler (struct intr_frame *f UNUSED)
       unsigned size = *((unsigned *) f->esp + 3);
       check_memory (buffer, size);
 
-      lock_acquire(&file_lock);
+      lock_acquire (&file_lock);
       f->eax = write (fd, buffer, size);
-      lock_release(&file_lock);
+      lock_release (&file_lock);
       break;
     case SYS_SEEK:
       is_valid_ptr (f->esp, 2);
@@ -152,7 +158,7 @@ syscall_handler (struct intr_frame *f UNUSED)
 static void
 halt (void)
 {
-  shutdown_power_off();
+  shutdown_power_off ();
 }
 
 static void
@@ -165,10 +171,16 @@ exit (int status)
 static bool
 create (const char *file, unsigned initial_size)
 {
-  if (strlen(file) == 0)
+  if (strlen (file) == 0)
     return false;
 
-  return filesys_create(file, initial_size);
+  return filesys_create (file, initial_size);
+}
+
+static bool
+remove (const char *file)
+{
+  return filesys_remove (file);
 }
 
 static int
