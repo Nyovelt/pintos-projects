@@ -5,6 +5,8 @@
 #include <list.h>
 #include <stdint.h>
 
+#include "threads/synch.h" // lock
+
 /* States in a thread's life cycle. */
 enum thread_status
   {
@@ -110,6 +112,10 @@ struct thread
    If true, use multi-level feedback queue scheduler.
    Controlled by kernel command-line option "-o mlfqs". */
 extern bool thread_mlfqs;
+
+#ifdef USERPROG
+struct lock file_lock;
+#endif
 
 void thread_init (void);
 void thread_start (void);

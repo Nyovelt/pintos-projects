@@ -1,22 +1,27 @@
 #include "userprog/syscall.h"
 #include <stdio.h>
 #include <syscall-nr.h>
+#include "stdbool.h"
 #include "threads/interrupt.h"
 #include "threads/thread.h"
+
+#include <string.h>
 
 #include "threads/vaddr.h" // is_user_addr()
 #include "userprog/pagedir.h" // pagedir_get_page()
 
 #include "devices/shutdown.h" // shutdown_power_off()
+#include "filesys/filesys.h" // filesys_ functions
 
 #define STDOUT 1
 #define ERR -1
 
 static void syscall_handler (struct intr_frame *);
 
-static void syscall_halt (void);
-static void syscall_exit (int status);
-static int syscall_write(int fd, const void *buffer, unsigned size);
+static void halt (void);
+static void exit (int status);
+static bool create (const char *file, unsigned initial_size);
+static int write(int fd, const void *buffer, unsigned size);
 
 void
 syscall_init (void) 
@@ -36,21 +41,34 @@ is_valid_ptr (const void *esp, const int offset)
   const void *ptr = esp + offset * sizeof (void *);
   /* Check the first and last bytes */
   if (!is_valid_addr (ptr) || !is_valid_addr (ptr + sizeof (void *) - 1))
-    syscall_exit (ERR);
+    exit (ERR);
 }
 
 static void
-check_memory (const void *begin_addr, int size)
+check_memory (const void *begin_addr, const int size)
 {
   /* Check the entire memory slice accessed through this pointer */
   for (const void *ptr = begin_addr; ptr < begin_addr + size; ptr += PGSIZE)
     {
       if (!is_valid_addr (ptr))
-        syscall_exit (ERR);
+        exit (ERR);
     }
 
   if (!is_valid_addr (begin_addr + sizeof (void *) - 1))
-    syscall_exit (ERR);
+    exit (ERR);
+}
+
+static void
+check_string (const char *str)
+{
+  if (!is_valid_addr (str))
+    exit (ERR);
+
+  for (const char *c = str; *c != '\0'; c++)
+    {
+      if (c - str + 2 >= PGSIZE || !is_valid_addr (c))
+        exit (ERR);
+    }
 }
 
 static void
@@ -62,12 +80,12 @@ syscall_handler (struct intr_frame *f UNUSED)
   switch (*(int *) f->esp)
     {
     case SYS_HALT:
-      syscall_halt();
+      halt();
       break;
     case SYS_EXIT:
       is_valid_ptr (f->esp, 1);
       int status = *((int *) f->esp + 1);
-      syscall_exit (status);
+      exit (status);
       break;
     case SYS_EXEC:
       is_valid_ptr (f->esp, 1);
@@ -79,7 +97,13 @@ syscall_handler (struct intr_frame *f UNUSED)
       break;
     case SYS_CREATE:
       is_valid_ptr (f->esp, 2);
-      printf ("syscall create.\n");
+      const char *file = (const char *) (*((int *) f->esp + 1));
+      unsigned initial_size = *((unsigned *) f->esp + 2);
+      check_string(file);
+
+      lock_acquire(&file_lock);
+      f->eax = create(file, initial_size);
+      lock_release(&file_lock);
       break;
     case SYS_REMOVE:
       is_valid_ptr (f->esp, 1);
@@ -104,8 +128,9 @@ syscall_handler (struct intr_frame *f UNUSED)
       unsigned size = *((unsigned *) f->esp + 3);
       check_memory (buffer, size);
 
-      /* Place return value in EAX register */
-      f->eax = syscall_write (fd, buffer, size);
+      lock_acquire(&file_lock);
+      f->eax = write (fd, buffer, size);
+      lock_release(&file_lock);
       break;
     case SYS_SEEK:
       is_valid_ptr (f->esp, 2);
@@ -125,20 +150,29 @@ syscall_handler (struct intr_frame *f UNUSED)
 }
 
 static void
-syscall_halt (void)
+halt (void)
 {
   shutdown_power_off();
 }
 
 static void
-syscall_exit (int status)
+exit (int status)
 {
   thread_current ()->exit_code = status;
   thread_exit ();
 }
 
+static bool
+create (const char *file, unsigned initial_size)
+{
+  if (strlen(file) == 0)
+    return false;
+
+  return filesys_create(file, initial_size);
+}
+
 static int
-syscall_write (int fd, const void *buffer, unsigned size)
+write (int fd, const void *buffer, unsigned size)
 {
   if (fd == STDOUT)
     {
