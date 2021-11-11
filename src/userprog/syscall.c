@@ -34,6 +34,10 @@ static bool remove (const char *file);
 static int write (int fd, const void *buffer, unsigned size);
 static int
 syscall_filesize (int fd);
+static int
+syscall_seek (int fd, unsigned position);
+static int
+syscall_tell (int fd);
 struct file_descriptor *get_file_descriptor (int fd);
 void
 syscall_init (void)
@@ -159,11 +163,11 @@ syscall_handler (struct intr_frame *f UNUSED)
       break;
     case SYS_SEEK:
       is_valid_ptr (f->esp, 2);
-      printf ("syscall seek.\n");
+      f->eax = syscall_seek (*((int *) f->esp + 1), *((unsigned *) f->esp + 2));
       break;
     case SYS_TELL:
       is_valid_ptr (f->esp, 1);
-      printf ("syscall tell.\n");
+      f->eax = syscall_tell (*((int *) f->esp + 1));
       break;
     case SYS_CLOSE:
       is_valid_ptr (f->esp, 1);
@@ -335,6 +339,36 @@ syscall_filesize (int fd)
   int size = file_length (f->file);
   lock_release (&file_lock);
   return size;
+}
+
+static int
+syscall_seek (int fd, unsigned position)
+{
+  lock_acquire (&file_lock);
+  struct file_descriptor *f = get_file_descriptor (fd);
+  if (f == NULL || f->fd == NULL || f->file == NULL)
+    {
+      lock_release (&file_lock);
+      return -1;
+    }
+  file_seek (f->file, position);
+  lock_release (&file_lock);
+  return 0;
+}
+
+static int
+syscall_tell (int fd)
+{
+  lock_acquire (&file_lock);
+  struct file_descriptor *f = get_file_descriptor (fd);
+  if (f == NULL || f->fd == NULL || f->file == NULL)
+    {
+      lock_release (&file_lock);
+      return -1;
+    }
+  int pos = file_tell (f->file);
+  lock_release (&file_lock);
+  return pos;
 }
 
 struct file_descriptor *
