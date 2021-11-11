@@ -145,7 +145,7 @@ syscall_handler (struct intr_frame *f UNUSED)
       // void *buffer = (void *) (*((int *) f->esp + 2));
       // unsigned size = *((unsigned *) f->esp + 3);
       check_memory (*((void **) f->esp + 2), *((unsigned *) f->esp + 3));
-      f->eax = stscall_read (*((int *) f->esp + 1), *((void **) f->esp + 2), *((unsigned *) f->esp + 3));
+      f->eax = stscall_read (*((int *) f->esp + 1), (void *) (*((int *) f->esp + 2)), *((unsigned *) f->esp + 3));
 
       //f->eax = stscall_read (fd, buffer, size);
       break;
@@ -155,10 +155,7 @@ syscall_handler (struct intr_frame *f UNUSED)
       void *buffer = (void *) (*((int *) f->esp + 2));
       unsigned size = *((unsigned *) f->esp + 3);
       check_memory (buffer, size);
-
-      lock_acquire (&file_lock);
       f->eax = write (fd, buffer, size);
-      lock_release (&file_lock);
       break;
     case SYS_SEEK:
       is_valid_ptr (f->esp, 2);
@@ -196,7 +193,6 @@ create (const char *file, unsigned initial_size)
 {
   if (strlen (file) == 0)
     return false;
-
   return filesys_create (file, initial_size);
 }
 
@@ -209,13 +205,41 @@ remove (const char *file)
 static int
 write (int fd, const void *buffer, unsigned size)
 {
-  if (fd == STDOUT)
+  lock_acquire (&file_lock);
+  if (fd == STDOUT_FILENO)
     {
       putbuf (buffer, size);
+      lock_release (&file_lock);
       return size;
     }
+  else if (fd == STDIN_FILENO)
+    {
+      lock_release (&file_lock);
+      return -1;
+    }
   else
-    return -1;
+    {
+      struct thread *t = thread_current ();
+      for (struct list_elem *e = list_begin (&t->fd_list); e != list_end (&t->fd_list); e = list_next (e))
+        {
+          struct file_descriptor *f = list_entry (e, struct file_descriptor, elem);
+          if (f == NULL)
+            {
+              lock_release (&file_lock);
+              return -1;
+            }
+          if (f->fd == fd)
+            {
+              printf ("\n buffer: %p \n", buffer);
+              printf ("\n size: %ud \n", size);
+              int ret = file_write (buffer, size);
+              lock_release (&file_lock);
+              return ret;
+            }
+        }
+    }
+  lock_release (&file_lock);
+  return -1;
 }
 
 static int
