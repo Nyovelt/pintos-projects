@@ -230,9 +230,10 @@ write (int fd, const void *buffer, unsigned size)
             }
           if (f->fd == fd)
             {
-              printf ("\n buffer: %p \n", buffer);
-              printf ("\n size: %ud \n", size);
-              int ret = file_write (buffer, size);
+              // printf ("\n buffer: %p \n", buffer);
+              // printf ("\n buffer: %s \n", buffer);
+              // printf ("\n size: %ud \n", size);
+              int ret = file_write (f->file, buffer, size);
               lock_release (&file_lock);
               return ret;
             }
