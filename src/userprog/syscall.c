@@ -13,6 +13,7 @@
 #include "devices/shutdown.h" // shutdown_power_off()
 #include "filesys/filesys.h"  // filesys_ functions
 
+#define STDIN 0
 #define STDOUT 1
 #define ERR -1
 
@@ -24,6 +25,8 @@ static int
 syscall_open (const char *file);
 static int
 syscall_close (int fd);
+static int
+stscall_read (int fd, void *buffer, unsigned size);
 static void halt (void);
 static void exit (int status);
 static bool create (const char *file, unsigned initial_size);
@@ -135,7 +138,14 @@ syscall_handler (struct intr_frame *f UNUSED)
       break;
     case SYS_READ:
       is_valid_ptr (f->esp, 3);
-      printf ("syscall read.\n");
+      //printf ("syscall read.\n");
+      // int fd = *((int *) f->esp + 1);
+      // void *buffer = (void *) (*((int *) f->esp + 2));
+      // unsigned size = *((unsigned *) f->esp + 3);
+      check_memory (*((void **) f->esp + 2), *((unsigned *) f->esp + 3));
+      f->eax = stscall_read (*((int *) f->esp + 1), *((void **) f->esp + 2), *((unsigned *) f->esp + 3));
+
+      //f->eax = stscall_read (fd, buffer, size);
       break;
     case SYS_WRITE:
       is_valid_ptr (f->esp, 3);
@@ -263,4 +273,40 @@ syscall_close (int fd)
   //lock_release (&file_lock);
   lock_release (&file_lock);
   return -1;
+}
+
+static int
+stscall_read (int fd, void *buffer, unsigned size)
+{
+  if (fd == STDIN)
+    {
+      for (int i = 0; i < size; i++)
+        {
+          *((char *) buffer + i) = input_getc ();
+        }
+      return size;
+    }
+  else
+    {
+      struct thread *t = thread_current ();
+      lock_acquire (&file_lock);
+      for (struct list_elem *e = list_begin (&t->fd_list); e != list_end (&t->fd_list); e = list_next (e))
+        {
+          struct file_descriptor *f = list_entry (e, struct file_descriptor, elem);
+          if (f == NULL || f->fd == NULL)
+            {
+              lock_release (&file_lock);
+              return -1;
+            }
+          if (f->fd == fd)
+            {
+              int bytes_read = file_read (f->file, buffer, size);
+              lock_release (&file_lock);
+              // printf ("return: %d", bytes_read);
+              return bytes_read;
+            }
+        }
+      lock_release (&file_lock);
+      return -1;
+    }
 }
