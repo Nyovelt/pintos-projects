@@ -32,7 +32,8 @@ static void exit (int status);
 static bool create (const char *file, unsigned initial_size);
 static bool remove (const char *file);
 static int write (int fd, const void *buffer, unsigned size);
-
+static int
+syscall_filesize (int fd);
 
 void
 syscall_init (void)
@@ -134,7 +135,8 @@ syscall_handler (struct intr_frame *f UNUSED)
       break;
     case SYS_FILESIZE:
       is_valid_ptr (f->esp, 1);
-      printf ("syscall filesize.\n");
+      //printf ("syscall filesize.\n");
+      f->eax = syscall_filesize (*((int *) f->esp + 1));
       break;
     case SYS_READ:
       is_valid_ptr (f->esp, 3);
@@ -309,4 +311,28 @@ stscall_read (int fd, void *buffer, unsigned size)
       lock_release (&file_lock);
       return -1;
     }
+}
+
+static int
+syscall_filesize (int fd)
+{
+  struct thread *t = thread_current ();
+  lock_acquire (&file_lock);
+  for (struct list_elem *e = list_begin (&t->fd_list); e != list_end (&t->fd_list); e = list_next (e))
+    {
+      struct file_descriptor *f = list_entry (e, struct file_descriptor, elem);
+      if (f == NULL || f->fd == NULL)
+        {
+          lock_release (&file_lock);
+          return -1;
+        }
+      if (f->fd == fd)
+        {
+          int size = file_length (f->file);
+          lock_release (&file_lock);
+          return size;
+        }
+    }
+  lock_release (&file_lock);
+  return -1;
 }
