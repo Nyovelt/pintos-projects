@@ -34,7 +34,7 @@ static bool remove (const char *file);
 static int write (int fd, const void *buffer, unsigned size);
 static int
 syscall_filesize (int fd);
-
+struct file_descriptor *get_file_descriptor (int fd);
 void
 syscall_init (void)
 {
@@ -219,25 +219,15 @@ write (int fd, const void *buffer, unsigned size)
     }
   else
     {
-      struct thread *t = thread_current ();
-      for (struct list_elem *e = list_begin (&t->fd_list); e != list_end (&t->fd_list); e = list_next (e))
+      struct file_descriptor *f = get_file_descriptor (fd);
+      if (f == NULL || f->fd == NULL || f->file == NULL)
         {
-          struct file_descriptor *f = list_entry (e, struct file_descriptor, elem);
-          if (f == NULL)
-            {
-              lock_release (&file_lock);
-              return -1;
-            }
-          if (f->fd == fd)
-            {
-              // printf ("\n buffer: %p \n", buffer);
-              // printf ("\n buffer: %s \n", buffer);
-              // printf ("\n size: %ud \n", size);
-              int ret = file_write (f->file, buffer, size);
-              lock_release (&file_lock);
-              return ret;
-            }
+          lock_release (&file_lock);
+          return -1;
         }
+      int ret = file_write (f->file, buffer, size);
+      lock_release (&file_lock);
+      return ret;
     }
   lock_release (&file_lock);
   return -1;
@@ -292,7 +282,7 @@ syscall_close (int fd)
         {
           list_remove (e);
           file_close (f->file);
-          free (f);
+          free (f); // TODO: difference between free and page?
           lock_release (&file_lock);
           return 0;
         }
@@ -317,47 +307,53 @@ stscall_read (int fd, void *buffer, unsigned size)
     {
       struct thread *t = thread_current ();
       lock_acquire (&file_lock);
-      for (struct list_elem *e = list_begin (&t->fd_list); e != list_end (&t->fd_list); e = list_next (e))
+      struct file_descriptor *f = get_file_descriptor (fd);
+      if (f == NULL || f->fd == NULL || f->file == NULL)
         {
-          struct file_descriptor *f = list_entry (e, struct file_descriptor, elem);
-          if (f == NULL || f->fd == NULL)
-            {
-              lock_release (&file_lock);
-              return -1;
-            }
-          if (f->fd == fd)
-            {
+          lock_release (&file_lock);
+          return -1;
+        }
+
               int bytes_read = file_read (f->file, buffer, size);
               lock_release (&file_lock);
-              // printf ("return: %d", bytes_read);
               return bytes_read;
-            }
-        }
-      lock_release (&file_lock);
-      return -1;
     }
+  lock_release (&file_lock);
+  return -1;
 }
 
 static int
 syscall_filesize (int fd)
 {
-  struct thread *t = thread_current ();
   lock_acquire (&file_lock);
+  struct file_descriptor *f = get_file_descriptor (fd);
+  if (f == NULL || f->fd == NULL || f->file == NULL)
+    {
+      lock_release (&file_lock);
+      return -1;
+    }
+  int size = file_length (f->file);
+  lock_release (&file_lock);
+  return size;
+}
+
+struct file_descriptor *
+get_file_descriptor (int fd)
+{
+  struct thread *t = thread_current ();
+  if (&t->fd_list == NULL)
+    return NULL;
   for (struct list_elem *e = list_begin (&t->fd_list); e != list_end (&t->fd_list); e = list_next (e))
     {
       struct file_descriptor *f = list_entry (e, struct file_descriptor, elem);
       if (f == NULL || f->fd == NULL)
         {
-          lock_release (&file_lock);
-          return -1;
+          return NULL;
         }
       if (f->fd == fd)
         {
-          int size = file_length (f->file);
-          lock_release (&file_lock);
-          return size;
+          return f;
         }
     }
-  lock_release (&file_lock);
-  return -1;
+  return NULL;
 }
