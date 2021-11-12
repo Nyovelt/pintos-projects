@@ -44,17 +44,21 @@ process_execute (const char *file_name)
   strlcpy (fn_copy, file_name, PGSIZE);
 
   /* Parse the ﬁlename deliminating by white spaces */
-  char *argv[ARGS_LIMIT];
+  char *argv_[ARGS_LIMIT];
   char *token, *save_ptr;
   int argc = 0;
   for (token = strtok_r (fn_copy, " ", &save_ptr);
        token != NULL;
        token = strtok_r (NULL, " ", &save_ptr))
-    argv[argc++] = token;
-  argv[argc] = NULL;
-
+    argv_[argc++] = token;
+  argv_[argc] = NULL;
+  // char *argv = palloc_get_page (0);
+  // memcpy (argv, argv_, (argc + 1) * sizeof (char));
+  //printf ("argv[0]: %s, argv: %s\n", argv_[0], argv_);
   /* Create a new thread to execute FILE_NAME. */
-  tid = thread_create (argv[0], PRI_DEFAULT, start_process, argv);
+  tid = thread_create (argv_[0], PRI_DEFAULT, start_process, argv_);
+  struct thread *t = get_thread_by_tid (tid);
+
   if (tid == TID_ERROR)
     palloc_free_page (fn_copy); 
   return tid;
@@ -65,6 +69,7 @@ process_execute (const char *file_name)
 static void
 start_process (void *argv)
 {
+  //printf ("start process \n");
   /* Use the REAL filename */
   char *file_name = *(char **)argv;
 
@@ -77,7 +82,7 @@ start_process (void *argv)
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
   success = load (file_name, &if_.eip, &if_.esp, argv); // load access to filename as well as args
-
+  sema_up (&(thread_current ()->sema_load));            // 告诉 syscall_exec 我装完了
   /* If load failed, quit. */
   palloc_free_page (file_name);
   if (!success) 

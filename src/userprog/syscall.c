@@ -5,20 +5,20 @@
 #include "threads/interrupt.h"
 #include "threads/thread.h"
 #include "threads/synch.h"
-
 #include <string.h>
-
 #include "threads/vaddr.h"    // is_user_addr()
 #include "userprog/pagedir.h" // pagedir_get_page()
 #include "devices/shutdown.h" // shutdown_power_off()
 #include "filesys/filesys.h"  // filesys_ functions
-
+#include "userprog/process.h"
+typedef int pid_t;
 #define STDIN 0
 #define STDOUT 1
 #define ERR -1
 
 
-static void syscall_handler (struct intr_frame *);
+static void
+syscall_handler (struct intr_frame *);
 
 
 static int
@@ -39,6 +39,7 @@ syscall_seek (int fd, unsigned position);
 static int
 syscall_tell (int fd);
 struct file_descriptor *get_file_descriptor (int fd);
+static pid_t syscall_exec (const char *cmd_line);
 void
 syscall_init (void)
 {
@@ -105,11 +106,12 @@ syscall_handler (struct intr_frame *f UNUSED)
       break;
     case SYS_EXEC:
       is_valid_ptr (f->esp, 1);
-      printf ("syscall exec.\n");
+      //printf ("syscall exec.\n");
+      f->eax = syscall_exec (*((char **) f->esp + 1));
       break;
     case SYS_WAIT:
       is_valid_ptr (f->esp, 1);
-      printf ("syscall wait.\n");
+      //printf ("syscall wait.\n");
       break;
     case SYS_CREATE:
       is_valid_ptr (f->esp, 2);
@@ -390,4 +392,46 @@ get_file_descriptor (int fd)
         }
     }
   return NULL;
+}
+
+static pid_t
+syscall_exec (const char *cmd_line)
+{
+  if (cmd_line == NULL)
+    return -1;
+
+  char *p = cmd_line;
+  while (pagedir_get_page ((void *) thread_current ()->pagedir, p) != NULL && *p != '\0')
+    p++;
+  if (pagedir_get_page ((void *) thread_current ()->pagedir, p) == NULL)
+    {
+      exit (ERR); //TODO: pass exec-bad-ptr but may have side effects
+      return -1;
+    }
+
+  //printf ("cmd_line: %s\n", cmd_line);
+  pid_t pid = process_execute (cmd_line); // 创建用户进程并获得 tid
+  struct thread *chd = get_thread_by_tid (pid);
+  sema_down (&(chd->sema_load)); // 等待进程加载完成
+
+  //printf ("pid: %d\n", pid);
+  // struct thread *child = get_thread_by_tid (pid);
+
+  // if (child == NULL) // 如果进程不存在
+  //   return -1;
+
+  // // 等待子进程执行完毕
+  // //sema_down (&child->sema_load);
+  // printf ("load success 2 \n");
+  // //判断子进程加载状态
+  // if (child->load_status == FAIL)
+  //   {
+  //     // 失败
+  //     list_remove (&child->child_elem);
+  //     return -1;
+  //   }
+  // //sema_up (&child->child_sema_load);
+  // printf ("run process \n");
+  // thread_yield ();
+  // return pid;
 }

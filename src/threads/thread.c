@@ -469,9 +469,14 @@ init_thread (struct thread *t, const char *name, int priority)
   t->magic = THREAD_MAGIC;
 
 #ifdef USERPROG
-  list_init (&t->fd_list);
-  t->next_fd = 2;
-  lock_init (&t->filesys_lock);
+  list_init (&t->fd_list);              // 初始化 file descriptor list
+  t->next_fd = 2;                       // 第一个 file descriptor 的 id 为 2
+  lock_init (&t->filesys_lock);         // 初始化文件锁
+  list_init (&t->child_list);           // 初始化子进程列表
+  t->load_status = WAITING;             // 初始化子进程加载状态
+  sema_init (&(t->sema), 0);            // 初始化子进程加载信号量
+  sema_init (&(t->sema_load), 0);       // 初始化子进程加载信号量
+  sema_init (&(t->child_sema_load), 1); //告诉子进程可以开始执行
 #endif
 
 
@@ -593,3 +598,20 @@ allocate_tid (void)
 /* Offset of `stack' member within `struct thread'.
    Used by switch.S, which can't figure it out on its own. */
 uint32_t thread_stack_ofs = offsetof (struct thread, stack);
+
+
+struct thread *
+get_thread_by_tid (tid_t tid)
+{
+  struct list_elem *e;
+  struct thread *t;
+
+  for (e = list_begin (&all_list); e != list_end (&all_list);
+       e = list_next (e))
+    {
+      t = list_entry (e, struct thread, allelem);
+      if (t->tid == tid)
+        return t;
+    }
+  return NULL;
+}

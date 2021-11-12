@@ -109,13 +109,27 @@ struct thread
     int next_fd;
     struct list fd_list;
 
-
     struct file_descriptor
     {
         struct file *file;
         int fd;
         struct list_elem elem;
     };
+
+    /* begin exec */
+    struct list child_list;      // 子进程列表
+    struct list_elem child_elem; // 子进程列表中的元素
+    enum exec_status {
+      SUCCESS,
+      FAIL,
+      WAITING
+    };
+    enum exec_status load_status;
+    struct semaphore sema;
+    struct semaphore sema_load;       // 用于等待子进程加载完成
+    struct semaphore child_sema_load; // 用于标志子进程可以继续开始执行
+    int exit_status;                  // 用于子进程退出时返回给父进程的状态码
+
 #endif
 
     /* Owned by thread.c. */
@@ -161,5 +175,5 @@ int thread_get_nice (void);
 void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
-
+struct thread *get_thread_by_tid (tid_t tid);
 #endif /* threads/thread.h */
