@@ -480,7 +480,9 @@ init_thread (struct thread *t, const char *name, int priority)
   sema_init (&(t->sema_load), 0);       // 初始化子进程加载信号量
   sema_init (&(t->child_sema_load), 0); //告诉子进程可以开始执行
   sema_init (&(t->sema_wait), 0);       // 初始化子进程执行信号量
-  t->exit_code = -114514;               // 初始化子进程退出码
+  sema_init (&(t->child_sema_wait), 0); // 初始化子进程执行信号量
+  //t->exit_code = -114514;               // 初始化子进程退出码
+  t->parent = NULL;
 #endif
 
 
