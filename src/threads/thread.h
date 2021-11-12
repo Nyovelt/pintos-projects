@@ -122,12 +122,14 @@ struct thread
     enum exec_status {
       SUCCESS,
       FAIL,
-      WAITING
+      WAITING,
+      FINISHED
     };
     enum exec_status load_status;
     struct semaphore sema;
     struct semaphore sema_load;       // 用于等待子进程加载完成
     struct semaphore child_sema_load; // 用于标志子进程可以继续开始执行
+    struct semaphore sema_wait;       // 用于等待子进程加载完成
     int exit_status;                  // 用于子进程退出时返回给父进程的状态码
 
 #endif

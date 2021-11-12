@@ -221,7 +221,9 @@ thread_block (void)
   ASSERT (intr_get_level () == INTR_OFF);
 
   thread_current ()->status = THREAD_BLOCKED;
+  //printf ("%s:%d thread %p\n", __FILE__, __LINE__, thread_current ());
   schedule ();
+  //printf ("%s:%d thread %p\n", __FILE__, __LINE__, thread_current ());
 }
 
 /* Transitions a blocked thread T to the ready-to-run state.
@@ -476,11 +478,14 @@ init_thread (struct thread *t, const char *name, int priority)
   t->load_status = WAITING;             // 初始化子进程加载状态
   sema_init (&(t->sema), 0);            // 初始化子进程加载信号量
   sema_init (&(t->sema_load), 0);       // 初始化子进程加载信号量
-  sema_init (&(t->child_sema_load), 1); //告诉子进程可以开始执行
+  sema_init (&(t->child_sema_load), 0); //告诉子进程可以开始执行
+  sema_init (&(t->sema_wait), 0);       // 初始化子进程执行信号量
+  t->exit_code = -114514;               // 初始化子进程退出码
 #endif
 
 
-  old_level = intr_disable ();
+  old_level
+      = intr_disable ();
   list_push_back (&all_list, &t->allelem);
   intr_set_level (old_level);
 }

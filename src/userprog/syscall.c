@@ -40,6 +40,7 @@ static int
 syscall_tell (int fd);
 struct file_descriptor *get_file_descriptor (int fd);
 static pid_t syscall_exec (const char *cmd_line);
+static int syscall_wait (pid_t pid);
 void
 syscall_init (void)
 {
@@ -112,6 +113,7 @@ syscall_handler (struct intr_frame *f UNUSED)
     case SYS_WAIT:
       is_valid_ptr (f->esp, 1);
       //printf ("syscall wait.\n");
+      f->eax = syscall_wait (*((pid_t *) f->esp + 1));
       break;
     case SYS_CREATE:
       is_valid_ptr (f->esp, 2);
@@ -409,16 +411,26 @@ syscall_exec (const char *cmd_line)
       return -1;
     }
 
-  //printf ("cmd_line: %s\n", cmd_line);
   pid_t pid = process_execute (cmd_line); // 创建用户进程并获得 tid
+  printf ("%s:%d thread %d\n", __FILE__, __LINE__, pid);
+
+  struct thread *t = thread_current ();
+  printf ("%s:%d thread %p\n", __FILE__, __LINE__, t);
+
   struct thread *chd = get_thread_by_tid (pid);
+  printf ("chd: %p\n", chd);
   if (chd == NULL) // 如果进程不存在
     return -1;
+  printf ("chd: %p\n", chd);
+
   sema_down (&(chd->sema_load)); // 等待进程加载完成
   chd = get_thread_by_tid (pid);
 
   if (chd == NULL) // 如果进程不存在
-    return -1;
+    {
+      printf ("chd == NULL");
+      return -1;
+    }
 
   // printf ("load success 2 \n");
   // //判断子进程加载状态
@@ -427,10 +439,20 @@ syscall_exec (const char *cmd_line)
       // 失败
       //list_remove (&chd->child_elem);
       printf ("load fail \n");
+      sema_up (&(thread_current ()->child_sema_load));
       return -1;
     }
-  //sema_up (&chd->child_sema_load);
-  // printf ("run process \n");
+  list_push_back (&thread_current ()->child_list, &chd->child_elem);
+  sema_up (&(thread_current ()->child_sema_load));
+  printf ("run process \n");
   thread_yield ();
   return pid;
+}
+
+static int
+syscall_wait (pid_t pid)
+{
+  if (pid == -1)
+    return -1;
+  return process_wait (pid);
 }

@@ -44,7 +44,7 @@ process_execute (const char *file_name)
   strlcpy (fn_copy, file_name, PGSIZE);
 
   /* Parse the ﬁlename deliminating by white spaces */
-  char *argv_[ARGS_LIMIT];
+  char *argv_[ARGS_LIMIT]; // TODO
   char *token, *save_ptr;
   int argc = 0;
   for (token = strtok_r (fn_copy, " ", &save_ptr);
@@ -65,6 +65,7 @@ process_execute (const char *file_name)
     {
       //sema_down (&t->child_sema_load);
     }
+  printf ("%s:%d thread %p\n", __FILE__, __LINE__, thread_current ());
   return tid;
 }
 
@@ -86,6 +87,7 @@ start_process (void *argv)
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
   success = load (file_name, &if_.eip, &if_.esp, argv); // load access to filename as well as args
+  printf ("start process success: %d\n", success);
   if (!success)
     {
       // printf ("not success\n");
@@ -93,10 +95,18 @@ start_process (void *argv)
       thread_current ()->exit_code = -1;
       thread_current ()->load_status = FAIL;
     }
+  else
+    {
+      //thread_current ()->exit_code = 81;
+    }
+  struct thread *t = thread_current ();
+  printf ("%s:%d thread %p\n", __FILE__, __LINE__, t);
   sema_up (&(thread_current ()->sema_load));            // 告诉 syscall_exec 我装完了
-  //sema_down (&(thread_current ()->child_sema_load));    // 等待 syscall_exec 执行完毕
-  /* If load failed, quit. */
-  palloc_free_page (file_name);
+  printf ("%s:%d thread %p\n", __FILE__, __LINE__, t);
+  sema_down (&(thread_current ()->child_sema_load)); // 等待 syscall_exec 执行完毕
+
+  // palloc_free_page (file_name);
+  // /* If load failed, quit. */
   if (!success)
     {
       thread_current ()->exit_code = -1;
@@ -126,9 +136,49 @@ start_process (void *argv)
 int
 process_wait (tid_t child_tid UNUSED) 
 {
+  for (;;)
+    ;
   /* Allow child process to finish all its setup in order to check stack */
-  timer_sleep(200);
-  return -1;
+  timer_sleep (200);
+  //return -1;
+  struct thread *chd = NULL;
+  /* get current thread child with right pid_t */
+  //enum intr_level old_level = intr_disable ();
+  for (struct list_elem *e = list_begin (&thread_current ()->child_list);
+       e != list_end (&thread_current ()->child_list);
+       e = list_next (e))
+    {
+
+      struct thread *t = list_entry (e, struct thread, child_elem);
+      if (t->tid == child_tid)
+        {
+          chd = t;
+          break;
+        }
+    }
+
+  //intr_set_level (old_level);
+  struct thread *t = chd;
+  if (t != NULL)
+    {
+      printf ("tid: %d\n", t->tid);
+      printf ("name: %s\n", t->name);
+      printf ("exit_code: %d\n", t->exit_code);
+      printf ("load_status: %d\n", t->load_status);
+    }
+  /* now we find t */
+  /* wait for child to finish */
+  if (chd == NULL)
+    return -1;
+  if (chd->exit_code != FINISHED)
+    sema_down (&chd->sema_wait);
+
+  // /* remove it from child list */
+  // list_remove (&chd->child_elem);
+
+  int exit_code = chd->exit_code;
+  //printf ("exit_code: %d\n", exit_code);
+  return exit_code;
 }
 
 /* Free the current process's resources. */
@@ -138,7 +188,9 @@ process_exit (void)
   struct thread *cur = thread_current ();
 
   printf ("%s: exit(%d)\n", cur->name, cur->exit_code); // print exit code
-
+  // printf ("%s: pid(%d)\n", cur->name, cur->tid);
+  sema_up (&cur->sema_wait);
+  cur->load_status = FINISHED;
   uint32_t *pd;
 
   /* Destroy the current process's page directory and switch back
@@ -156,6 +208,15 @@ process_exit (void)
       cur->pagedir = NULL;
       pagedir_activate (NULL);
       pagedir_destroy (pd);
+    }
+
+  struct thread *t = thread_current ();
+  if (t != NULL)
+    {
+      printf ("tid: %d\n", t->tid);
+      printf ("name: %s\n", t->name);
+      printf ("exit_code: %d\n", t->exit_code);
+      printf ("load_status: %d\n", t->load_status);
     }
 }
 
