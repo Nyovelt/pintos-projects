@@ -60,7 +60,11 @@ process_execute (const char *file_name)
   struct thread *t = get_thread_by_tid (tid);
 
   if (tid == TID_ERROR)
-    palloc_free_page (fn_copy); 
+    palloc_free_page (fn_copy);
+  else
+    {
+      //sema_down (&t->child_sema_load);
+    }
   return tid;
 }
 
@@ -82,11 +86,23 @@ start_process (void *argv)
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
   success = load (file_name, &if_.eip, &if_.esp, argv); // load access to filename as well as args
+  if (!success)
+    {
+      // printf ("not success\n");
+      // printf ("tid: %d\n", thread_current ()->tid);
+      thread_current ()->exit_code = -1;
+      thread_current ()->load_status = FAIL;
+    }
   sema_up (&(thread_current ()->sema_load));            // 告诉 syscall_exec 我装完了
+  //sema_down (&(thread_current ()->child_sema_load));    // 等待 syscall_exec 执行完毕
   /* If load failed, quit. */
   palloc_free_page (file_name);
-  if (!success) 
-    thread_exit ();
+  if (!success)
+    {
+      thread_current ()->exit_code = -1;
+      thread_current ()->load_status = FAIL;
+      thread_exit ();
+    }
 
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in

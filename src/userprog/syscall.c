@@ -412,26 +412,25 @@ syscall_exec (const char *cmd_line)
   //printf ("cmd_line: %s\n", cmd_line);
   pid_t pid = process_execute (cmd_line); // 创建用户进程并获得 tid
   struct thread *chd = get_thread_by_tid (pid);
+  if (chd == NULL) // 如果进程不存在
+    return -1;
   sema_down (&(chd->sema_load)); // 等待进程加载完成
+  chd = get_thread_by_tid (pid);
 
-  //printf ("pid: %d\n", pid);
-  // struct thread *child = get_thread_by_tid (pid);
+  if (chd == NULL) // 如果进程不存在
+    return -1;
 
-  // if (child == NULL) // 如果进程不存在
-  //   return -1;
-
-  // // 等待子进程执行完毕
-  // //sema_down (&child->sema_load);
   // printf ("load success 2 \n");
   // //判断子进程加载状态
-  // if (child->load_status == FAIL)
-  //   {
-  //     // 失败
-  //     list_remove (&child->child_elem);
-  //     return -1;
-  //   }
-  // //sema_up (&child->child_sema_load);
+  if (chd->load_status == FAIL)
+    {
+      // 失败
+      //list_remove (&chd->child_elem);
+      printf ("load fail \n");
+      return -1;
+    }
+  //sema_up (&chd->child_sema_load);
   // printf ("run process \n");
-  // thread_yield ();
-  // return pid;
+  thread_yield ();
+  return pid;
 }
