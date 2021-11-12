@@ -133,6 +133,7 @@ struct thread
     struct semaphore child_sema_wait; // 用于等待子进程加载完成
     int exit_status;                  // 用于子进程退出时返回给父进程的状态码
     struct thread *parent;            // 🤷‍♂️
+    struct file *self;
 #endif
 
     /* Owned by thread.c. */

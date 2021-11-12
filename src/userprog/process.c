@@ -81,6 +81,7 @@ process_execute (const char *file_name)
           sema_up (&(chd->child_sema_load));
           return -1;
         }
+
       chd->parent = t; // I am your father, prepare to die.
       list_push_back (&thread_current ()->child_list, &chd->child_elem);
       sema_up (&(chd->child_sema_load));
@@ -217,7 +218,22 @@ process_exit (void)
      to the kernel-only page directory. */
   if (cur->parent != NULL)
     sema_down (&cur->child_sema_wait);
-  pd = cur->pagedir;
+
+  if (&cur->fd_list == NULL)
+    return NULL;
+
+  for (struct list_elem *e = list_begin (&cur->fd_list); e != list_end (&cur->fd_list); e = list_next (e))
+    {
+      struct file_descriptor *f = list_entry (e, struct file_descriptor, elem);
+      lock_acquire (&file_lock);
+      file_close (f->file);
+      lock_release (&file_lock);
+    }
+  lock_acquire (&file_lock);
+  file_close (cur->self); //TODO: free
+  lock_release (&file_lock);
+  pd
+      = cur->pagedir;
   if (pd != NULL) 
     {
       /* Correct ordering here is crucial.  We must set
@@ -439,6 +455,11 @@ struct Elf32_Phdr
   done:
     /* We arrive here whether the load is successful or not. */
     file_close (file);
+    if (success)
+      {
+        file = filesys_open (file_name);
+        file_deny_write (file);
+      }
     return success;
   }
 
