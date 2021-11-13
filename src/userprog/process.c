@@ -53,9 +53,7 @@ process_execute (const char *file_name)
        token = strtok_r (NULL, " ", &save_ptr))
     argv_[argc++] = token;
   argv_[argc] = NULL;
-  // char *argv = palloc_get_page (0);
-  // memcpy (argv, argv_, (argc + 1) * sizeof (char));
-  //printf ("argv[0]: %s, argv: %s\n", argv_[0], argv_);
+
   /* Create a new thread to execute FILE_NAME. */
 
   tid = thread_create (argv_[0], PRI_DEFAULT, start_process, argv_);

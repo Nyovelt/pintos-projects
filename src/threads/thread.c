@@ -90,6 +90,9 @@ thread_init (void)
   ASSERT (intr_get_level () == INTR_OFF);
 
   lock_init (&tid_lock);
+#ifdef USERPROG
+  lock_init(&file_lock);
+#endif
   list_init (&ready_list);
   list_init (&all_list);
 
@@ -98,10 +101,6 @@ thread_init (void)
   init_thread (initial_thread, "main", PRI_DEFAULT);
   initial_thread->status = THREAD_RUNNING;
   initial_thread->tid = allocate_tid ();
-
-#ifdef USERPROG
-  lock_init(&file_lock);
-#endif
 }
 
 /* Starts preemptive thread scheduling by enabling interrupts.
@@ -473,22 +472,20 @@ init_thread (struct thread *t, const char *name, int priority)
 #ifdef USERPROG
   list_init (&t->fd_list);              // 初始化 file descriptor list
   t->next_fd = 2;                       // 第一个 file descriptor 的 id 为 2
-  lock_init (&t->filesys_lock);         // 初始化文件锁
+  //lock_init (&t->file_lock);            // 初始化文件锁
   list_init (&t->child_list);           // 初始化子进程列表
   t->load_status = WAITING;             // 初始化子进程加载状态
-  sema_init (&(t->sema), 0);            // 初始化子进程加载信号量
   sema_init (&(t->sema_load), 0);       // 初始化子进程加载信号量
-  sema_init (&(t->child_sema_load), 0); //告诉子进程可以开始执行
+  sema_init (&(t->child_sema_load), 0); // 告诉子进程可以开始执行
   sema_init (&(t->sema_wait), 0);       // 初始化子进程执行信号量
   sema_init (&(t->child_sema_wait), 0); // 初始化子进程执行信号量
   t->exit_code = -1;                    // 初始化子进程退出码
-  t->parent = NULL;
-  t->self = NULL;
+  t->parent = NULL;                     // 初始化父进程
+  t->self = NULL;                       // 初始化可执行文件
 #endif
 
 
-  old_level
-      = intr_disable ();
+  old_level = intr_disable ();
   list_push_back (&all_list, &t->allelem);
   intr_set_level (old_level);
 }

@@ -27,6 +27,9 @@ typedef int tid_t;
 #define PRI_DEFAULT 31                  /* Default priority. */
 #define PRI_MAX 63                      /* Highest priority. */
 
+/* Lock used to manipulate files */
+struct lock file_lock;
+
 /* A kernel thread or user process.
 
    Each thread structure is stored in its own 4 kB page.  The
@@ -99,41 +102,36 @@ struct thread
    /* For Alarm */
     uint64_t blocked_ticks;             /* The number of ticks the thread is blocked. */
 
-
 #ifdef USERPROG
-
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
     int exit_code;
-    struct lock filesys_lock;
+
     int next_fd;
     struct list fd_list;
-
     struct file_descriptor
     {
-        struct file *file;
-        int fd;
-        struct list_elem elem;
-    } file_descriptor;
+      struct file *file;
+      int fd;
+      struct list_elem elem;
+    } file_descriptor_;               // record the list of opened files
 
     /* begin exec */
-    struct list child_list;      // 子进程列表
-    struct list_elem child_elem; // 子进程列表中的元素
+    struct list child_list;           // eist of child processes
+    struct list_elem child_elem;      // elements in the list of child processes
     enum exec_status {
       SUCCESS,
       FAIL,
       WAITING,
       FINISHED
-    } exec_status;
-    enum exec_status load_status;
-    struct semaphore sema;
-    struct semaphore sema_load;       // 用于等待子进程加载完成
-    struct semaphore child_sema_load; // 用于标志子进程可以继续开始执行
-    struct semaphore sema_wait;       // 用于等待子进程加载完成
-    struct semaphore child_sema_wait; // 用于等待子进程加载完成
-    int exit_status;                  // 用于子进程退出时返回给父进程的状态码
-    struct thread *parent;            // 🤷‍♂️
-    struct file *self;
+    } load_status;                    // logging child process loads
+    struct semaphore sema_load;       // used to wait for a child process to finish loading
+    struct semaphore child_sema_load; // used to notify child processes that they can continue execution
+    struct semaphore sema_wait;       // used to wait for a child process to finish running
+    struct semaphore child_sema_wait; // used to notify child processes that they can continue to exit
+    int exit_status;                  // status code to be returned to the parent process when the child process exits
+    struct thread *parent;            // used to identify parent process
+    struct file *self;                // used to identify the execute file
 #endif
 
     /* Owned by thread.c. */
@@ -144,10 +142,6 @@ struct thread
    If true, use multi-level feedback queue scheduler.
    Controlled by kernel command-line option "-o mlfqs". */
 extern bool thread_mlfqs;
-
-#ifdef USERPROG
-struct lock file_lock;
-#endif
 
 void thread_init (void);
 void thread_start (void);
