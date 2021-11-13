@@ -4,12 +4,14 @@
              |     DESIGN DOCUMENT      |
              +--------------------------+
 
----- GROUP ----
+---- GROUP 15 ----
 
 > Fill in the names and email addresses of your group members.
 
 Yining Zhang <zhangyn3@shanghaitech.edu.cn>
 Feiran Qin <qinfr@shanghaitech.edu.cn>
+
+Yining Zhang did the project-setup and stack-setup, and did part of the system call, while Feiran Qin did the design of the functions involving the file descriptor. We did the `execute`, `exit` and `wait` together.
 
 ---- PRELIMINARIES ----
 
@@ -19,6 +21,12 @@ Feiran Qin <qinfr@shanghaitech.edu.cn>
 > Please cite any offline or online sources you consulted while
 > preparing your submission, other than the Pintos documentation, course
 > text, lecture notes, and course staff.
+
+Ref: 
+- [CS318 - Pintos
+Pintos source browser for JHU CS318 course
+](https://jhu-cs318.github.io/pintos-doxygen/html/index.html)
+
 
                ARGUMENT PASSING
                ================
@@ -62,7 +70,7 @@ Another way to avoid overflow is to use stack_push function, since stack is cons
 
 > A3: Why does Pintos implement strtok_r() but not strtok()?
 
-`strtok()` is not *thread safe* and `strtok_r()` is the thread-safe alternative.
+`strtok()` uses globa ldata thus is not thread safe, and `strtok_r()` is the thread-safe alternative.
 
 > A4: In Pintos, the kernel separates commands into a executable name
 > and arguments.  In Unix-like systems, the shell does this
@@ -83,7 +91,7 @@ Another way to avoid overflow is to use stack_push function, since stack is cons
 
 In `threads.h`
 
-```
+```C
 /* Lock used to manipulate files across threads */
 struct lock file_lock;
 
@@ -121,7 +129,6 @@ struct thread
     struct thread *parent;            // identify parent process
     struct file *self;                // identify the execute file
 #endif
-#endif
   }
 ```
 
@@ -153,8 +160,36 @@ First check if the memory pointed by buffer is valid, then get the file_lock, an
 > for a system call that only copies 2 bytes of data?  Is there room
 > for improvement in these numbers, and how much?
 
+If the size of the data is within the size of one page and greater than or equal to one byte, it will only be stored on one page of memory or on two pages. So the least possible number of inspections of the page table is 1 and the greatest is 2. The result is the same for the two-byte case. We can't think of any improvements at the moment.
+
 > B5: Briefly describe your implementation of the "wait" system call
 > and how it interacts with process termination.
+
+```C
+int
+process_wait (tid_t child_tid UNUSED)
+{
+  // dosomething
+  sema_down (&chd->sema_wait);
+  //do something
+  sema_up (&chd->child_sema_wait);
+  return exit_code;
+}
+```
+
+```C
+void
+process_exit (void)
+{
+  // do something
+  sema_up (&cur->sema_wait);
+  // do something
+  if (cur->parent != NULL)
+    sema_down (&cur->child_sema_wait);
+  // do something
+}
+```
+We use **two sema**, if P wait C befire C exit, the `process_wait()` function will down a semaA to wait for C to exit. If C exit before P wait, the `process_wait()` function will up a semaA to tell P that C exit. and down a semaB to wait for P to save the information such as `exit_code`. 
 
 > B6: Any access to user program memory at a user-specified address
 > can fail due to a bad pointer value.  Such accesses must cause the
@@ -170,13 +205,31 @@ First check if the memory pointed by buffer is valid, then get the file_lock, an
 > paragraphs, describe the strategy or strategies you adopted for
 > managing these issues.  Give an example.
 
+For each address, we check the validity using the system-provided `is_user_vaddr` and `pagedir_get_page`. For each block of memory pointed by the pointer, we check the head and tail of the memory block using the above method. Based on the above method, for memory of known size, we check the first, last and each page. For strings, we check them one by one by traversing towards `\0`.
+
+For locks, we release the lock before returning the error code. For temporarily allocated resources, the resources allocated are released in `process_exit`. We just need to make sure that all errors are properly jumped and exited.
+
+For example, in `syscall_close`, we have some code shown below:
+```C
+if (f == NULL || f->fd == 0)
+  {
+    lock_release (&file_lock);
+    return -1;
+  }
+```
+After `return -1`, the lock is freed and the `eax` get the error code `-1` then the process exit with `-1`. Then in `process_exit`, the file descriptors accocated before are freed.
+
 ---- SYNCHRONIZATION ----
 
 > B7: The "exec" system call returns -1 if loading the new executable
 > fails, so it cannot return before the new executable has completed
 > loading.  How does your code ensure this?  How is the load
 > success/failure status passed back to the thread that calls "exec"?
-We use **two sema**. One is for the parent process to wait for the child process to finish loading. The other is for the child process to wait for the parent process to finish loading. When the child process finishes loading, it will call `sema_up` on the `child_sema_load` semaphore. When the parent executing, it will first down the semaphore to wait for the child process to load. In the `load()` function, the child process will store whether it is sucess in the status of thread, which has status of SUCUCESS and FAIL. It is an Int variable in the structure 
+
+We use **two sema**. One is for the parent process to wait for the child process to finish loading. The other is for the child process to wait for the parent process to finish loading. When the child process finishes loading, it will call `sema_up` on the `child_sema_load` semaphore. When the parent executing, it will first down the semaphore to wait for the child process to load. In the `load()` function, the child process will store whether it is sucess in the status of thread, which has status of SUCUCESS and FAIL. It is an Int variable in the structure of thread. 
+
+One problem we have met before is that the MAIN thread won't go through the `syscall_exec` and the program will stucked in the `start_process` function, since it is waiting for a sema never up. The solution is that let the `process_execute` to manage sema and entities other than `syscall_exec`.
+
 > B8: Consider parent process P with child process C.  How do you
 > ensure proper synchronization and avoid race conditions when P
 > calls wait(C) before C exits?  After C exits?  How do you ensure
