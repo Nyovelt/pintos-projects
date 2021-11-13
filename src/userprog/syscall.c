@@ -1,46 +1,41 @@
 #include "userprog/syscall.h"
-#include <stdio.h>
 #include <syscall-nr.h>
-#include "stdbool.h"
+#include <stdio.h>
+#include <stdbool.h>
+#include <string.h>
 #include "threads/interrupt.h"
 #include "threads/thread.h"
 #include "threads/synch.h"
-#include <string.h>
-#include "threads/vaddr.h"    // is_user_addr()
-#include "userprog/pagedir.h" // pagedir_get_page()
-#include "devices/shutdown.h" // shutdown_power_off()
-#include "filesys/filesys.h"  // filesys_ functions
+#include "threads/vaddr.h"
+#include "threads/malloc.h"
+#include "userprog/pagedir.h"
+#include "devices/shutdown.h"
+#include "devices/input.h"
+#include "filesys/filesys.h"
+#include "filesys/file.h"
 #include "userprog/process.h"
+
 typedef int pid_t;
 #define STDIN 0
 #define STDOUT 1
-#define ERR -1
-
 
 static void
 syscall_handler (struct intr_frame *);
 
-
-static int
-syscall_open (const char *file);
-static int
-syscall_close (int fd);
-static int
-stscall_read (int fd, void *buffer, unsigned size);
-static void halt (void);
-static void exit (int status);
-static bool create (const char *file, unsigned initial_size);
-static bool remove (const char *file);
-static int write (int fd, const void *buffer, unsigned size);
-static int
-syscall_filesize (int fd);
-static void
-syscall_seek (int fd, unsigned position);
-static unsigned
-syscall_tell (int fd);
-struct file_descriptor *get_file_descriptor (int fd);
+static int syscall_open (const char *file);
+static int syscall_close (int fd);
+static int stscall_read (int fd, void *buffer, unsigned size);
+static void syscall_halt (void);
+static void syscall_exit (int status);
+static bool syscall_create (const char *file, unsigned initial_size);
+static bool syscall_remove (const char *file);
+static int syscall_write (int fd, const void *buffer, unsigned size);
+static int syscall_filesize (int fd);
+static void syscall_seek (int fd, unsigned position);
+static unsigned syscall_tell (int fd);
 static pid_t syscall_exec (const char *cmd_line);
 static int syscall_wait (pid_t pid);
+
 void
 syscall_init (void)
 {
@@ -59,7 +54,7 @@ is_valid_ptr (const void *esp, const int offset)
   const void *ptr = esp + offset * sizeof (void *);
   /* Check the first and last bytes */
   if (!is_valid_addr (ptr) || !is_valid_addr (ptr + sizeof (void *) - 1))
-    exit (ERR);
+    syscall_exit (-1);
 }
 
 static void
@@ -69,24 +64,41 @@ check_memory (const void *begin_addr, const int size)
   for (const void *ptr = begin_addr; ptr < begin_addr + size; ptr += PGSIZE)
     {
       if (!is_valid_addr (ptr))
-        exit (ERR);
+        syscall_exit (-1);
     }
 
   if (!is_valid_addr (begin_addr + sizeof (void *) - 1))
-    exit (ERR);
+    syscall_exit (-1);
 }
 
 static void
 check_string (const char *str)
 {
   if (!is_valid_addr (str))
-    exit (ERR);
+    syscall_exit (-1);
 
-  for (const char *c = str; *c != '\0'; c++)
+  for (const char *c = str; *c != '\0';)
     {
-      if (c - str + 2 >= PGSIZE || !is_valid_addr (c))
-        exit (ERR);
+      if (!is_valid_addr (++c))
+        syscall_exit (-1);
     }
+}
+
+static struct file_descriptor *
+get_file_descriptor (int fd)
+{
+  struct thread *t = thread_current ();
+  if (list_begin (&t->fd_list) == NULL)
+    return NULL;
+  for (struct list_elem *e = list_begin (&t->fd_list); e != list_end (&t->fd_list); e = list_next (e))
+    {
+      struct file_descriptor *f = list_entry (e, struct file_descriptor, elem);
+      if (f == NULL || f->fd == 0)
+        return NULL;
+      if (f->fd == fd)
+        return f;
+    }
+  return NULL;
 }
 
 static void
@@ -98,72 +110,51 @@ syscall_handler (struct intr_frame *f UNUSED)
   switch (*(int *) f->esp)
     {
     case SYS_HALT:
-      halt ();
+      syscall_halt ();
       break;
     case SYS_EXIT:
       is_valid_ptr (f->esp, 1);
-      int status = *((int *) f->esp + 1);
-      exit (status);
+      syscall_exit (*((int *) f->esp + 1));
       break;
     case SYS_EXEC:
       is_valid_ptr (f->esp, 1);
-      //printf ("syscall exec.\n");
       f->eax = syscall_exec (*((char **) f->esp + 1));
       break;
     case SYS_WAIT:
       is_valid_ptr (f->esp, 1);
-      //printf ("syscall wait.\n");
       f->eax = syscall_wait (*((pid_t *) f->esp + 1));
       break;
     case SYS_CREATE:
       is_valid_ptr (f->esp, 2);
-      const char *file_cr = (const char *) (*((int *) f->esp + 1));
-      unsigned initial_size = *((unsigned *) f->esp + 2);
-      check_string (file_cr);
-
+      check_string (*((const char **) f->esp + 1));
       lock_acquire (&file_lock);
-      f->eax = create (file_cr, initial_size);
+      f->eax = syscall_create (*((const char **) f->esp + 1), *((unsigned *) f->esp + 2));
       lock_release (&file_lock);
       break;
     case SYS_REMOVE:
       is_valid_ptr (f->esp, 1);
-      const char *file_rm = (const char *) (*((int *) f->esp + 1));
-      check_string (file_rm);
-
+      check_string (*((const char **) f->esp + 1));
       lock_acquire (&file_lock);
-      f->eax = remove (file_rm);
+      f->eax = syscall_remove (*((const char **) f->esp + 1));
       lock_release (&file_lock);
       break;
     case SYS_OPEN:
-
       is_valid_ptr (f->esp, 1);
-      //printf ("syscall open.\n");
-      //printf ("\n SYS_OPEN: %s \n", *((char **) f->esp + 1));
       f->eax = syscall_open (*((char **) f->esp + 1));
       break;
     case SYS_FILESIZE:
       is_valid_ptr (f->esp, 1);
-      //printf ("syscall filesize.\n");
       f->eax = syscall_filesize (*((int *) f->esp + 1));
       break;
     case SYS_READ:
       is_valid_ptr (f->esp, 3);
-      //printf ("syscall read.\n");
-      // int fd = *((int *) f->esp + 1);
-      // void *buffer = (void *) (*((int *) f->esp + 2));
-      // unsigned size = *((unsigned *) f->esp + 3);
       check_memory (*((void **) f->esp + 2), *((unsigned *) f->esp + 3));
       f->eax = stscall_read (*((int *) f->esp + 1), (void *) (*((int *) f->esp + 2)), *((unsigned *) f->esp + 3));
-
-      //f->eax = stscall_read (fd, buffer, size);
       break;
     case SYS_WRITE:
       is_valid_ptr (f->esp, 3);
-      int fd = *((int *) f->esp + 1);
-      void *buffer = (void *) (*((int *) f->esp + 2));
-      unsigned size = *((unsigned *) f->esp + 3);
-      check_memory (buffer, size);
-      f->eax = write (fd, buffer, size);
+      check_memory (*((void **) f->esp + 2), *((unsigned *) f->esp + 3));
+      f->eax = syscall_write (*((int *) f->esp + 1), (*((void **) f->esp + 2)), *((unsigned *) f->esp + 3));
       break;
     case SYS_SEEK:
       is_valid_ptr (f->esp, 2);
@@ -175,8 +166,7 @@ syscall_handler (struct intr_frame *f UNUSED)
       break;
     case SYS_CLOSE:
       is_valid_ptr (f->esp, 1);
-      //printf ("syscall close.\n");
-      f->eax = syscall_close (*((int **) f->esp + 1));
+      f->eax = syscall_close (*((int *) f->esp + 1));
       break;
     default:
       printf ("unknown syscall.\n");
@@ -184,20 +174,20 @@ syscall_handler (struct intr_frame *f UNUSED)
 }
 
 static void
-halt (void)
+syscall_halt (void)
 {
   shutdown_power_off ();
 }
 
 static void
-exit (int status)
+syscall_exit (int status)
 {
   thread_current ()->exit_code = status;
   thread_exit ();
 }
 
 static bool
-create (const char *file, unsigned initial_size)
+syscall_create (const char *file, unsigned initial_size)
 {
   if (strlen (file) == 0)
     return false;
@@ -205,13 +195,13 @@ create (const char *file, unsigned initial_size)
 }
 
 static bool
-remove (const char *file)
+syscall_remove (const char *file)
 {
   return filesys_remove (file);
 }
 
 static int
-write (int fd, const void *buffer, unsigned size)
+syscall_write (int fd, const void *buffer, unsigned size)
 {
   lock_acquire (&file_lock);
   if (fd == STDOUT_FILENO)
@@ -228,7 +218,7 @@ write (int fd, const void *buffer, unsigned size)
   else
     {
       struct file_descriptor *f = get_file_descriptor (fd);
-      if (f == NULL || f->fd == NULL || f->file == NULL)
+      if (f == NULL || f->fd == 0 || f->file == NULL)
         {
           lock_release (&file_lock);
           return -1;
@@ -244,18 +234,7 @@ write (int fd, const void *buffer, unsigned size)
 static int
 syscall_open (const char *file)
 {
-  if (file == NULL)
-    return -1;
-
-  char *p = file;
-  while (pagedir_get_page ((void *) thread_current ()->pagedir, p) != NULL && *p != '\0')
-    p++;
-  if (pagedir_get_page ((void *) thread_current ()->pagedir, p) == NULL)
-    {
-      exit (ERR); //TODO: pass open-bad-ptr but may have side effects
-      return -1;
-    }
-
+  check_string (file);
 
   lock_acquire (&file_lock);
   struct file *f = filesys_open (file);
@@ -281,7 +260,7 @@ syscall_close (int fd)
   for (struct list_elem *e = list_begin (&t->fd_list); e != list_end (&t->fd_list); e = list_next (e))
     {
       struct file_descriptor *f = list_entry (e, struct file_descriptor, elem);
-      if (f == NULL || f->fd == NULL)
+      if (f == NULL || f->fd == 0)
         {
           lock_release (&file_lock);
           return -1;
@@ -290,12 +269,11 @@ syscall_close (int fd)
         {
           list_remove (e);
           file_close (f->file);
-          free (f); // TODO: difference between free and page?
+          free (f);
           lock_release (&file_lock);
           return 0;
         }
     }
-  //lock_release (&file_lock);
   lock_release (&file_lock);
   return -1;
 }
@@ -305,26 +283,22 @@ stscall_read (int fd, void *buffer, unsigned size)
 {
   if (fd == STDIN)
     {
-      for (int i = 0; i < size; i++)
-        {
-          *((char *) buffer + i) = input_getc ();
-        }
+      for (unsigned int i = 0; i < size; i++)
+        *((char *) buffer + i) = input_getc ();
       return size;
     }
   else
     {
-      struct thread *t = thread_current ();
       lock_acquire (&file_lock);
       struct file_descriptor *f = get_file_descriptor (fd);
-      if (f == NULL || f->fd == NULL || f->file == NULL)
+      if (f == NULL || f->fd == 0 || f->file == NULL)
         {
           lock_release (&file_lock);
           return -1;
         }
-
-              int bytes_read = file_read (f->file, buffer, size);
-              lock_release (&file_lock);
-              return bytes_read;
+      int bytes_read = file_read (f->file, buffer, size);
+      lock_release (&file_lock);
+      return bytes_read;
     }
   lock_release (&file_lock);
   return -1;
@@ -335,7 +309,7 @@ syscall_filesize (int fd)
 {
   lock_acquire (&file_lock);
   struct file_descriptor *f = get_file_descriptor (fd);
-  if (f == NULL || f->fd == NULL || f->file == NULL)
+  if (f == NULL || f->fd == 0 || f->file == NULL)
     {
       lock_release (&file_lock);
       return -1;
@@ -350,7 +324,7 @@ syscall_seek (int fd, unsigned position)
 {
   lock_acquire (&file_lock);
   struct file_descriptor *f = get_file_descriptor (fd);
-  if (f == NULL || f->fd == NULL || f->file == NULL)
+  if (f == NULL || f->fd == 0 || f->file == NULL)
     {
       lock_release (&file_lock);
       return;
@@ -364,7 +338,7 @@ syscall_tell (int fd)
 {
   lock_acquire (&file_lock);
   struct file_descriptor *f = get_file_descriptor (fd);
-  if (f == NULL || f->fd == NULL || f->file == NULL)
+  if (f == NULL || f->fd == 0 || f->file == NULL)
     {
       lock_release (&file_lock);
       return -1;
@@ -374,46 +348,12 @@ syscall_tell (int fd)
   return pos;
 }
 
-struct file_descriptor *
-get_file_descriptor (int fd)
-{
-  struct thread *t = thread_current ();
-  if (&t->fd_list == NULL)
-    return NULL;
-  for (struct list_elem *e = list_begin (&t->fd_list); e != list_end (&t->fd_list); e = list_next (e))
-    {
-      struct file_descriptor *f = list_entry (e, struct file_descriptor, elem);
-      if (f == NULL || f->fd == NULL)
-        {
-          return NULL;
-        }
-      if (f->fd == fd)
-        {
-          return f;
-        }
-    }
-  return NULL;
-}
-
 static pid_t
 syscall_exec (const char *cmd_line)
 {
-  if (cmd_line == NULL)
-    return -1;
-
-  char *p = cmd_line;
-  while (pagedir_get_page ((void *) thread_current ()->pagedir, p) != NULL && *p != '\0')
-    p++;
-  if (pagedir_get_page ((void *) thread_current ()->pagedir, p) == NULL)
-    {
-      exit (ERR); //TODO: pass exec-bad-ptr but may have side effects
-      return -1;
-    }
+  check_string (cmd_line);
 
   pid_t pid = process_execute (cmd_line); // 创建用户进程并获得 tid
-  
-
-  // printf ("load success 2 \n");
 
   thread_yield ();
   return pid;

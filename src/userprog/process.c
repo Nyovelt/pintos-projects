@@ -15,6 +15,7 @@
 #include "threads/init.h"
 #include "threads/interrupt.h"
 #include "threads/palloc.h"
+#include "threads/malloc.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
 #include "devices/timer.h"
@@ -59,9 +60,6 @@ process_execute (const char *file_name)
 
   tid = thread_create (argv_[0], PRI_DEFAULT, start_process, argv_);
 
-  //printf ("%s:%d thread %p\n", __FILE__, __LINE__, thread_current ());
-  struct thread *t = get_thread_by_tid (tid);
-
   if (tid == TID_ERROR)
     palloc_free_page (fn_copy);
   else
@@ -76,8 +74,6 @@ process_execute (const char *file_name)
       if (chd->load_status == FAIL)
         {
           // 失败
-          //list_remove (&chd->child_elem);
-          //printf ("load fail \n");
           sema_up (&(chd->child_sema_load));
           return -1;
         }
@@ -86,7 +82,6 @@ process_execute (const char *file_name)
       list_push_back (&thread_current ()->child_list, &chd->child_elem);
       sema_up (&(chd->child_sema_load));
     }
-  //printf ("%s:%d thread %p\n", __FILE__, __LINE__, tid);
   return tid;
 }
 
@@ -95,7 +90,6 @@ process_execute (const char *file_name)
 static void
 start_process (void *argv)
 {
-  //printf ("start process \n");
   /* Use the REAL filename */
   char *file_name = *(char **)argv;
 
@@ -108,20 +102,12 @@ start_process (void *argv)
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
   success = load (file_name, &if_.eip, &if_.esp, argv); // load access to filename as well as args
-  //printf ("start process success: %d\n", success);
+
   if (!success)
     {
-      // printf ("not success\n");
-      // printf ("tid: %d\n", thread_current ()->tid);
       thread_current ()->exit_code = -1;
       thread_current ()->load_status = FAIL;
     }
-  else
-    {
-      //thread_current ()->exit_code = 81;
-    }
-  struct thread *t = thread_current ();
-  //printf ("%s:%d thread %p\n", __FILE__, __LINE__, t);
   sema_up (&(thread_current ()->sema_load));            // 告诉 syscall_exec 我装完了
   sema_down (&(thread_current ()->child_sema_load));    // 等待 syscall_exec 执行完毕
 
@@ -154,21 +140,14 @@ start_process (void *argv)
    This function will be implemented in problem 2-2.  For now, it
    does nothing. */
 int
-process_wait (tid_t child_tid UNUSED) 
+process_wait (tid_t child_tid UNUSED)
 {
-  // for (;;)
-  //   ;
-  /* Allow child process to finish all its setup in order to check stack */
-  // timer_sleep (300);
-  // return -1;
   struct thread *chd = NULL;
   /* get current thread child with right pid_t */
-  //enum intr_level old_level = intr_disable ();
   for (struct list_elem *e = list_begin (&thread_current ()->child_list);
        e != list_end (&thread_current ()->child_list);
        e = list_next (e))
     {
-
       struct thread *t = list_entry (e, struct thread, child_elem);
       if (t->tid == child_tid)
         {
@@ -177,28 +156,17 @@ process_wait (tid_t child_tid UNUSED)
         }
     }
 
-  //intr_set_level (old_level);
-  //printfstruct thread *t = chd;
-  // if (t != NULL)
-  //   {
-  //     printf ("tid: %d\n", t->tid);
-  //     printf ("name: %s\n", t->name);
-  //     printf ("exit_code: %d\n", t->exit_code);
-  //     printf ("load_status: %d\n", t->load_status);
-  //   }
   /* now we find t */
   /* wait for child to finish */
   if (chd == NULL)
     return -1;
-  // if (chd->exit_code != FINISHED)
+
   sema_down (&chd->sema_wait);
 
-  // /* remove it from child list */
   list_remove (&chd->child_elem);
 
   int exit_code = chd->exit_code;
   sema_up (&chd->child_sema_wait);
-  //printf ("exit_code: %d\n", exit_code);
   return exit_code;
 }
 
@@ -209,20 +177,12 @@ process_exit (void)
   struct thread *cur = thread_current ();
 
   printf ("%s: exit(%d)\n", cur->name, cur->exit_code); // print exit code
-  // printf ("%s: pid(%d)\n", cur->name, cur->tid);
   sema_up (&cur->sema_wait);
   cur->load_status = FINISHED;
   uint32_t *pd;
   lock_acquire (&file_lock);
   if (cur->self != NULL)
-    {
-      file_close (cur->self); //TODO: free
-      //printf ("file close");
-    }
-  else
-    {
-      //printf ("file NULL");
-    }
+    file_close (cur->self);
   lock_release (&file_lock);
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
@@ -233,23 +193,23 @@ process_exit (void)
        e != list_end (&thread_current ()->child_list);
        e = list_next (e))
     {
-
       struct thread *t = list_entry (e, struct thread, child_elem);
       if (t != NULL)
-        {
           t->parent = NULL;
-        }
     }
-  for (struct list_elem *e = list_begin (&cur->fd_list); e != list_end (&cur->fd_list); e = list_next (e))
+
+  struct list_elem *to_del;
+  for (struct list_elem *e = list_begin (&cur->fd_list); e != list_end (&cur->fd_list); e = to_del)
     {
       struct file_descriptor *f = list_entry (e, struct file_descriptor, elem);
       lock_acquire (&file_lock);
       file_close (f->file);
+      to_del = list_next (e);
+      free(f);
       lock_release (&file_lock);
     }
 
-  pd
-      = cur->pagedir;
+  pd = cur->pagedir;
   if (pd != NULL) 
     {
       /* Correct ordering here is crucial.  We must set
@@ -263,15 +223,6 @@ process_exit (void)
       pagedir_activate (NULL);
       pagedir_destroy (pd);
     }
-
-  // struct thread *t = thread_current ();
-  // if (t != NULL)
-  //   {
-  //     printf ("tid: %d\n", t->tid);
-  //     printf ("name: %s\n", t->name);
-  //     printf ("exit_code: %d\n", t->exit_code);
-  //     printf ("load_status: %d\n", t->load_status);
-  //   }
 }
 
 /* Sets up the CPU for running user code in the current

@@ -114,7 +114,7 @@ struct thread
         struct file *file;
         int fd;
         struct list_elem elem;
-    };
+    } file_descriptor;
 
     /* begin exec */
     struct list child_list;      // 子进程列表
@@ -124,7 +124,7 @@ struct thread
       FAIL,
       WAITING,
       FINISHED
-    };
+    } exec_status;
     enum exec_status load_status;
     struct semaphore sema;
     struct semaphore sema_load;       // 用于等待子进程加载完成
