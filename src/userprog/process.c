@@ -42,6 +42,8 @@ process_execute (const char *file_name)
 
   if (fn_copy == NULL)
     return TID_ERROR;
+
+  lock_acquire(&file_lock);
   strlcpy (fn_copy, file_name, PGSIZE);
 
   /* Parse the ﬁlename deliminating by white spaces */
@@ -59,13 +61,18 @@ process_execute (const char *file_name)
   tid = thread_create (argv_[0], PRI_DEFAULT, start_process, argv_);
 
   if (tid == TID_ERROR)
-    palloc_free_page (fn_copy);
+    {
+      palloc_free_page (fn_copy);
+    }
   else
     {
       struct thread *t = thread_current ();
       struct thread *chd = get_thread_by_tid (tid);
       if (chd == NULL) // 如果进程不存在
-        return -1;
+        {
+          lock_release(&file_lock);
+          return -1;
+        }
       sema_down (&(chd->sema_load)); // 等待进程加载完成
 
       // //判断子进程加载状态
@@ -73,13 +80,14 @@ process_execute (const char *file_name)
         {
           // 失败
           sema_up (&(chd->child_sema_load));
+          lock_release(&file_lock);
           return -1;
         }
-
       chd->parent = t; // I am your father, prepare to die.
       list_push_back (&thread_current ()->child_list, &chd->child_elem);
       sema_up (&(chd->child_sema_load));
     }
+  lock_release(&file_lock);
   return tid;
 }
 
