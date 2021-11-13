@@ -198,6 +198,7 @@ process_exit (void)
           t->parent = NULL;
     }
 
+  /* Close all files and free resource */
   struct list_elem *to_del;
   for (struct list_elem *e = list_begin (&cur->fd_list); e != list_end (&cur->fd_list); e = to_del)
     {
