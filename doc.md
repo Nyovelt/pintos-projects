@@ -8,7 +8,7 @@
 
 > Fill in the names and email addresses of your group members.
 
-FirstName LastName <email@domain.example>
+Yining Zhang <zhangyn3@shanghaitech.edu.cn>
 Feiran Qin <qinfr@shanghaitech.edu.cn>
 
 ---- PRELIMINARIES ----
@@ -48,11 +48,11 @@ No `struct` member, global or static variable, `typedef' or enumeration were int
   argv_[argc] = NULL;
 ```
 
-The function of `strtok_r()` is that, if it meets the second argument, which is " " in this case, it will split the string into tokens, and return the first token. Then it will save the pointer of the first token, and use it to split the next token. The process will continue until the string is empty. The last token will be NULL. 
+We use the function  `strtok_r()`. If it meets the second argument, which is `"  "` in this case, it will split the string into tokens, and return the first token. Then it will save the pointer of the first token, and use it to split the next token. The process will continue until the string is empty. The last token will be NULL. 
 
 The point is that, for example, first argument is a = ABC0EF0GG, it will return a pointer, point to the a[0], and change a into ABC \0 EF0GG ,then point to a[5], and change a into ABC \0 EF \0 GG. 
 
-Since fn_copy is creat by palloc_get_page (0), it will exist until ` palloc_free_page (fn_copy);` is called. That will ensure the memory safe.
+Since `fn_copy` is creat by `palloc_get_page (0)`, it will exist until ` palloc_free_page (fn_copy);` is called. That will ensure the memory safe.
 
 And the document says that there has a ARGS_LIMIT of 128. `And palloc_get_page (0)` will return a page with size of 4096 bytes. So it won't overflow the stack page.
 
@@ -62,7 +62,7 @@ Another way to avoid overflow is to use stack_push function, since stack is cons
 
 > A3: Why does Pintos implement strtok_r() but not strtok()?
 
-`strtok_r()` is much safer than `strtok()`, because the pointer is malloc dynamically. //TODO: check
+`strtok()` is not *thread safe* and `strtok_r()` is the thread-safe alternative.
 
 > A4: In Pintos, the kernel separates commands into a executable name
 > and arguments.  In Unix-like systems, the shell does this
@@ -80,6 +80,50 @@ Another way to avoid overflow is to use stack_push function, since stack is cons
 > B1: Copy here the declaration of each new or changed `struct' or
 > `struct' member, global or static variable, `typedef', or
 > enumeration.  Identify the purpose of each in 25 words or less.
+
+In `threads.h`
+
+```
+/* Lock used to manipulate files across threads */
+struct lock file_lock;
+
+struct thread
+  {
+    ...
+#ifdef USERPROG
+    /* Owned by userprog/process.c. */
+    uint32_t *pagedir;                  /* Page directory. */
+    int exit_code;                      /* Exit code. */
+
+    int next_fd;
+    struct list fd_list;
+    struct file_descriptor
+    {
+      struct file *file;
+      int fd;
+      struct list_elem elem;
+    } file_descriptor_;               // record the list of opened files
+
+    /* begin exec */
+    struct list child_list;           // eist of child processes
+    struct list_elem child_elem;      // elements in the list of child processes
+    enum exec_status {
+      SUCCESS,
+      FAIL,
+      WAITING,
+      FINISHED
+    } load_status;                    // logging child process loads
+    struct semaphore sema_load;       // wait for a child process to finish loading
+    struct semaphore child_sema_load; // tell child processes to continue execution
+    struct semaphore sema_wait;       // wait for a child process to finish running
+    struct semaphore child_sema_wait; // tell child processes to continue to exit
+    int exit_status;                  // status code returned to the parent when exits
+    struct thread *parent;            // identify parent process
+    struct file *self;                // identify the execute file
+#endif
+#endif
+  }
+```
 
 > B2: Describe how file descriptors are associated with open files.
 > Are file descriptors unique within the entire OS or just within a
@@ -162,3 +206,4 @@ the quarter.
 > students, either for future quarters or the remaining projects?
 
 > Any other comments?
+

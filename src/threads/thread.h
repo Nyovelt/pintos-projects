@@ -27,7 +27,7 @@ typedef int tid_t;
 #define PRI_DEFAULT 31                  /* Default priority. */
 #define PRI_MAX 63                      /* Highest priority. */
 
-/* Lock used to manipulate files */
+/* Lock manipulate files across threads */
 struct lock file_lock;
 
 /* A kernel thread or user process.
@@ -105,7 +105,7 @@ struct thread
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
-    int exit_code;
+    int exit_code;                      /* Exit code. */
 
     int next_fd;
     struct list fd_list;
@@ -125,13 +125,13 @@ struct thread
       WAITING,
       FINISHED
     } load_status;                    // logging child process loads
-    struct semaphore sema_load;       // used to wait for a child process to finish loading
-    struct semaphore child_sema_load; // used to notify child processes that they can continue execution
-    struct semaphore sema_wait;       // used to wait for a child process to finish running
-    struct semaphore child_sema_wait; // used to notify child processes that they can continue to exit
-    int exit_status;                  // status code to be returned to the parent process when the child process exits
-    struct thread *parent;            // used to identify parent process
-    struct file *self;                // used to identify the execute file
+    struct semaphore sema_load;       // wait for a child process to finish loading
+    struct semaphore child_sema_load; // tell child processes to continue execution
+    struct semaphore sema_wait;       // wait for a child process to finish running
+    struct semaphore child_sema_wait; // tell child processes to continue to exit
+    int exit_status;                  // status code returned to the parent when exits
+    struct thread *parent;            // identify parent process
+    struct file *self;                // identify the execute file
 #endif
 
     /* Owned by thread.c. */
