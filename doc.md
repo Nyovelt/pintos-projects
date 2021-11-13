@@ -9,8 +9,7 @@
 > Fill in the names and email addresses of your group members.
 
 FirstName LastName <email@domain.example>
-FirstName LastName <email@domain.example>
-FirstName LastName <email@domain.example>
+Feiran Qin <qinfr@shanghaitech.edu.cn>
 
 ---- PRELIMINARIES ----
 
@@ -30,19 +29,48 @@ FirstName LastName <email@domain.example>
 > `struct' member, global or static variable, `typedef', or
 > enumeration.  Identify the purpose of each in 25 words or less.
 
+No `struct` member, global or static variable, `typedef' or enumeration were introduced.
+
 ---- ALGORITHMS ----
 
 > A2: Briefly describe how you implemented argument parsing.  How do
 > you arrange for the elements of argv[] to be in the right order?
 > How do you avoid overflowing the stack page?
 
+```C
+  char *argv_[ARGS_LIMIT];
+  char *token, *save_ptr;
+  int argc = 0;
+  for (token = strtok_r (fn_copy, " ", &save_ptr);
+       token != NULL;
+       token = strtok_r (NULL, " ", &save_ptr))
+    argv_[argc++] = token;
+  argv_[argc] = NULL;
+```
+
+The function of `strtok_r()` is that, if it meets the second argument, which is " " in this case, it will split the string into tokens, and return the first token. Then it will save the pointer of the first token, and use it to split the next token. The process will continue until the string is empty. The last token will be NULL. 
+
+The point is that, for example, first argument is a = ABC0EF0GG, it will return a pointer, point to the a[0], and change a into ABC \0 EF0GG ,then point to a[5], and change a into ABC \0 EF \0 GG. 
+
+Since fn_copy is creat by palloc_get_page (0), it will exist until ` palloc_free_page (fn_copy);` is called. That will ensure the memory safe.
+
+And the document says that there has a ARGS_LIMIT of 128. `And palloc_get_page (0)` will return a page with size of 4096 bytes. So it won't overflow the stack page.
+
+Another way to avoid overflow is to use stack_push function, since stack is considerably larger, it has an advantage that  it will not be affected by ARGS_LIMIT. But it will be a little bit complicated. And our way also works fine.
+
 ---- RATIONALE ----
 
 > A3: Why does Pintos implement strtok_r() but not strtok()?
 
+`strtok_r()` is much safer than `strtok()`, because the pointer is malloc dynamically. //TODO: check
+
 > A4: In Pintos, the kernel separates commands into a executable name
 > and arguments.  In Unix-like systems, the shell does this
 > separation.  Identify at least two advantages of the Unix approach.
+
+1. Pipeline
+2. The shell can be used to execute commands in a batch file.
+
 
                  SYSTEM CALLS
                  ============
