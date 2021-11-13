@@ -57,13 +57,10 @@ process_execute (const char *file_name)
   argv_[argc] = NULL;
 
   /* Create a new thread to execute FILE_NAME. */
-
   tid = thread_create (argv_[0], PRI_DEFAULT, start_process, argv_);
 
   if (tid == TID_ERROR)
-    {
       palloc_free_page (fn_copy);
-    }
   else
     {
       struct thread *t = thread_current ();

@@ -121,6 +121,7 @@ struct thread
     struct thread *parent;            // identify parent process
     struct file *self;                // identify the execute file
 #endif
+#endif
   }
 ```
 
@@ -132,6 +133,10 @@ struct thread
 
 > B3: Describe your code for reading and writing user data from the
 > kernel.
+
+**Read:**
+
+First check if the memory pointed by buffer is legal, then get the `file_lock`. Then determine the input mode according to `fd`: if it is `STDIN`, read keyboard input from standard input, if it is not `STDIN` or `STDOUT`, find and open the file according to `fd` and call the system function `file_read` to read it. If there is an error, release the lock and return `-1`.
 
 > B4: Suppose a system call causes a full page (4,096 bytes) of data
 > to be copied from user space into the kernel.  What is the least
