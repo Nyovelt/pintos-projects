@@ -80,7 +80,8 @@ check_string (const char *str)
 
   for (const char *c = str; *c != '\0';)
     {
-      if (!is_valid_addr (++c))
+      c++; // avoid deferencing invalid address
+      if (c - str + 2 == PGSIZE || !is_valid_addr (c))
         syscall_exit (-1);
     }
 }
