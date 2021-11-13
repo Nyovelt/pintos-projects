@@ -24,7 +24,7 @@ syscall_handler (struct intr_frame *);
 
 static int syscall_open (const char *file);
 static int syscall_close (int fd);
-static int stscall_read (int fd, void *buffer, unsigned size);
+static int syscall_read (int fd, void *buffer, unsigned size);
 static void syscall_halt (void);
 static void syscall_exit (int status);
 static bool syscall_create (const char *file, unsigned initial_size);
@@ -57,6 +57,7 @@ is_valid_ptr (const void *esp, const int offset)
     syscall_exit (-1);
 }
 
+/* Check the head, tail and pages */
 static void
 check_memory (const void *begin_addr, const int size)
 {
@@ -127,16 +128,12 @@ syscall_handler (struct intr_frame *f UNUSED)
     case SYS_CREATE:
       is_valid_ptr (f->esp, 2);
       check_string (*((const char **) f->esp + 1));
-      lock_acquire (&file_lock);
       f->eax = syscall_create (*((const char **) f->esp + 1), *((unsigned *) f->esp + 2));
-      lock_release (&file_lock);
       break;
     case SYS_REMOVE:
       is_valid_ptr (f->esp, 1);
       check_string (*((const char **) f->esp + 1));
-      lock_acquire (&file_lock);
       f->eax = syscall_remove (*((const char **) f->esp + 1));
-      lock_release (&file_lock);
       break;
     case SYS_OPEN:
       is_valid_ptr (f->esp, 1);
@@ -149,7 +146,7 @@ syscall_handler (struct intr_frame *f UNUSED)
     case SYS_READ:
       is_valid_ptr (f->esp, 3);
       check_memory (*((void **) f->esp + 2), *((unsigned *) f->esp + 3));
-      f->eax = stscall_read (*((int *) f->esp + 1), (void *) (*((int *) f->esp + 2)), *((unsigned *) f->esp + 3));
+      f->eax = syscall_read (*((int *) f->esp + 1), (void *) (*((int *) f->esp + 2)), *((unsigned *) f->esp + 3));
       break;
     case SYS_WRITE:
       is_valid_ptr (f->esp, 3);
@@ -191,13 +188,19 @@ syscall_create (const char *file, unsigned initial_size)
 {
   if (strlen (file) == 0)
     return false;
-  return filesys_create (file, initial_size);
+  lock_acquire (&file_lock);
+  bool ret = filesys_create (file, initial_size);
+  lock_release (&file_lock);
+  return ret;
 }
 
 static bool
 syscall_remove (const char *file)
 {
-  return filesys_remove (file);
+  lock_acquire (&file_lock);
+  bool ret = filesys_remove (file);
+  lock_release (&file_lock);
+  return ret;
 }
 
 static int
@@ -279,17 +282,18 @@ syscall_close (int fd)
 }
 
 static int
-stscall_read (int fd, void *buffer, unsigned size)
+syscall_read (int fd, void *buffer, unsigned size)
 {
+  lock_acquire (&file_lock);
   if (fd == STDIN)
     {
       for (unsigned int i = 0; i < size; i++)
         *((char *) buffer + i) = input_getc ();
+      lock_release (&file_lock);
       return size;
     }
-  else
+  else if (fd != STDOUT)
     {
-      lock_acquire (&file_lock);
       struct file_descriptor *f = get_file_descriptor (fd);
       if (f == NULL || f->fd == 0 || f->file == NULL)
         {

@@ -121,7 +121,6 @@ struct thread
     struct thread *parent;            // identify parent process
     struct file *self;                // identify the execute file
 #endif
-#endif
   }
 ```
 
