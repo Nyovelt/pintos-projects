@@ -213,15 +213,33 @@ process_exit (void)
   sema_up (&cur->sema_wait);
   cur->load_status = FINISHED;
   uint32_t *pd;
-
+  lock_acquire (&file_lock);
+  if (cur->self != NULL)
+    {
+      file_close (cur->self); //TODO: free
+      //printf ("file close");
+    }
+  else
+    {
+      //printf ("file NULL");
+    }
+  lock_release (&file_lock);
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
   if (cur->parent != NULL)
     sema_down (&cur->child_sema_wait);
 
-  if (&cur->fd_list == NULL)
-    return NULL;
+  for (struct list_elem *e = list_begin (&thread_current ()->child_list);
+       e != list_end (&thread_current ()->child_list);
+       e = list_next (e))
+    {
 
+      struct thread *t = list_entry (e, struct thread, child_elem);
+      if (t != NULL)
+        {
+          t->parent = NULL;
+        }
+    }
   for (struct list_elem *e = list_begin (&cur->fd_list); e != list_end (&cur->fd_list); e = list_next (e))
     {
       struct file_descriptor *f = list_entry (e, struct file_descriptor, elem);
@@ -229,9 +247,7 @@ process_exit (void)
       file_close (f->file);
       lock_release (&file_lock);
     }
-  lock_acquire (&file_lock);
-  file_close (cur->self); //TODO: free
-  lock_release (&file_lock);
+
   pd
       = cur->pagedir;
   if (pd != NULL) 
@@ -459,6 +475,7 @@ struct Elf32_Phdr
       {
         file = filesys_open (file_name);
         file_deny_write (file);
+        t->self = file;
       }
     return success;
   }

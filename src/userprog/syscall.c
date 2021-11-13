@@ -34,9 +34,9 @@ static bool remove (const char *file);
 static int write (int fd, const void *buffer, unsigned size);
 static int
 syscall_filesize (int fd);
-static int
+static void
 syscall_seek (int fd, unsigned position);
-static int
+static unsigned
 syscall_tell (int fd);
 struct file_descriptor *get_file_descriptor (int fd);
 static pid_t syscall_exec (const char *cmd_line);
@@ -167,7 +167,7 @@ syscall_handler (struct intr_frame *f UNUSED)
       break;
     case SYS_SEEK:
       is_valid_ptr (f->esp, 2);
-      f->eax = syscall_seek (*((int *) f->esp + 1), *((unsigned *) f->esp + 2));
+      syscall_seek (*((int *) f->esp + 1), *((unsigned *) f->esp + 2));
       break;
     case SYS_TELL:
       is_valid_ptr (f->esp, 1);
@@ -345,7 +345,7 @@ syscall_filesize (int fd)
   return size;
 }
 
-static int
+void
 syscall_seek (int fd, unsigned position)
 {
   lock_acquire (&file_lock);
@@ -353,14 +353,13 @@ syscall_seek (int fd, unsigned position)
   if (f == NULL || f->fd == NULL || f->file == NULL)
     {
       lock_release (&file_lock);
-      return -1;
+      return;
     }
   file_seek (f->file, position);
   lock_release (&file_lock);
-  return 0;
 }
 
-static int
+static unsigned
 syscall_tell (int fd)
 {
   lock_acquire (&file_lock);
