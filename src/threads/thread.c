@@ -90,6 +90,9 @@ thread_init (void)
   ASSERT (intr_get_level () == INTR_OFF);
 
   lock_init (&tid_lock);
+#ifdef USERPROG
+  lock_init(&file_lock);
+#endif
   list_init (&ready_list);
   list_init (&all_list);
 
@@ -217,7 +220,9 @@ thread_block (void)
   ASSERT (intr_get_level () == INTR_OFF);
 
   thread_current ()->status = THREAD_BLOCKED;
+  //printf ("%s:%d thread %p\n", __FILE__, __LINE__, thread_current ());
   schedule ();
+  //printf ("%s:%d thread %p\n", __FILE__, __LINE__, thread_current ());
 }
 
 /* Transitions a blocked thread T to the ready-to-run state.
@@ -464,6 +469,22 @@ init_thread (struct thread *t, const char *name, int priority)
   t->priority = priority;
   t->magic = THREAD_MAGIC;
 
+#ifdef USERPROG
+  list_init (&t->fd_list);              // 初始化 file descriptor list
+  t->next_fd = 2;                       // 第一个 file descriptor 的 id 为 2
+  //lock_init (&t->file_lock);            // 初始化文件锁
+  list_init (&t->child_list);           // 初始化子进程列表
+  t->load_status = WAITING;             // 初始化子进程加载状态
+  sema_init (&(t->sema_load), 0);       // 初始化子进程加载信号量
+  sema_init (&(t->child_sema_load), 0); // 告诉子进程可以开始执行
+  sema_init (&(t->sema_wait), 0);       // 初始化子进程执行信号量
+  sema_init (&(t->child_sema_wait), 0); // 初始化子进程执行信号量
+  t->exit_code = -1;                    // 初始化子进程退出码
+  t->parent = NULL;                     // 初始化父进程
+  t->self = NULL;                       // 初始化可执行文件
+#endif
+
+
   old_level = intr_disable ();
   list_push_back (&all_list, &t->allelem);
   intr_set_level (old_level);
@@ -582,3 +603,20 @@ allocate_tid (void)
 /* Offset of `stack' member within `struct thread'.
    Used by switch.S, which can't figure it out on its own. */
 uint32_t thread_stack_ofs = offsetof (struct thread, stack);
+
+
+struct thread *
+get_thread_by_tid (tid_t tid)
+{
+  struct list_elem *e;
+  struct thread *t;
+
+  for (e = list_begin (&all_list); e != list_end (&all_list);
+       e = list_next (e))
+    {
+      t = list_entry (e, struct thread, allelem);
+      if (t->tid == tid)
+        return t;
+    }
+  return NULL;
+}

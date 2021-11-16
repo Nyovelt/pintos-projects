@@ -1,0 +1,18 @@
+---
+BasedOnStyle: GNU
+AllowShortCaseLabelsOnASingleLine: true
+BraceWrapping:
+  AfterControlStatement: true
+  AfterFunction: true
+  AfterStruct: true
+  BeforeElse: true
+  IndentBraces: true
+BreakBeforeBraces: Custom
+ColumnLimit: 0
+Cpp11BracedListStyle: true
+IndentAccessModifiers: true
+IndentCaseBlocks: true
+MaxEmptyLinesToKeep: 2
+ReflowComments: false
+SortIncludes: false
+SpaceAfterCStyleCast: true

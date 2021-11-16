@@ -5,6 +5,8 @@
 #include <list.h>
 #include <stdint.h>
 
+#include "threads/synch.h" // lock
+
 /* States in a thread's life cycle. */
 enum thread_status
   {
@@ -13,6 +15,7 @@ enum thread_status
     THREAD_BLOCKED,     /* Waiting for an event to trigger. */
     THREAD_DYING        /* About to be destroyed. */
   };
+
 
 /* Thread identifier type.
    You can redefine this to whatever type you like. */
@@ -23,6 +26,9 @@ typedef int tid_t;
 #define PRI_MIN 0                       /* Lowest priority. */
 #define PRI_DEFAULT 31                  /* Default priority. */
 #define PRI_MAX 63                      /* Highest priority. */
+
+/* Lock manipulate files across threads */
+struct lock file_lock;
 
 /* A kernel thread or user process.
 
@@ -93,9 +99,39 @@ struct thread
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
 
+   /* For Alarm */
+    uint64_t blocked_ticks;             /* The number of ticks the thread is blocked. */
+
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
+    int exit_code;                      /* Exit code. */
+
+    int next_fd;
+    struct list fd_list;
+    struct file_descriptor
+    {
+      struct file *file;
+      int fd;
+      struct list_elem elem;
+    } file_descriptor_;               // record the list of opened files
+
+    /* begin exec */
+    struct list child_list;           // eist of child processes
+    struct list_elem child_elem;      // elements in the list of child processes
+    enum exec_status {
+      SUCCESS,
+      FAIL,
+      WAITING,
+      FINISHED
+    } load_status;                    // logging child process loads
+    struct semaphore sema_load;       // wait for a child process to finish loading
+    struct semaphore child_sema_load; // tell child processes to continue execution
+    struct semaphore sema_wait;       // wait for a child process to finish running
+    struct semaphore child_sema_wait; // tell child processes to continue to exit
+    int exit_status;                  // status code returned to the parent when exits
+    struct thread *parent;            // identify parent process
+    struct file *self;                // identify the execute file
 #endif
 
     /* Owned by thread.c. */
@@ -137,5 +173,5 @@ int thread_get_nice (void);
 void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
-
+struct thread *get_thread_by_tid (tid_t tid);
 #endif /* threads/thread.h */
