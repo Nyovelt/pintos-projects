@@ -25,3 +25,14 @@ frame_table_init ()
   hash_init (&frame_table, frame_hash, frame_less, NULL);
   lock_init (&lock);
 }
+
+struct frame_table_entry *
+frame_table_lookup (const void *frame)
+{
+  struct frame_table_entry f;
+  struct hash_elem *e;
+
+  f.frame = frame;
+  e = hash_find (&frame_table, &f.hash_elem);
+  return e != NULL ? hash_entry (e, struct frame_table_entry, hash_elem) : NULL;
+}
