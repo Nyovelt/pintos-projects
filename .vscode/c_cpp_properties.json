@@ -10,6 +10,7 @@
                 "${workspaceFolder}/src/lib/user"
             ],
             "defines": [
+                "USERPROG",
                 "VM"
             ],
             "compilerPath": "/usr/bin/gcc",
