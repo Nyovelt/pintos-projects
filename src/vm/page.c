@@ -29,10 +29,7 @@ page_entry_init (void *user_vaddr, bool isDirty, bool isAccessed)
   // TODO: lock? directly use malloc?
   struct sup_page_table_entry *spte = malloc (sizeof (struct sup_page_table_entry));
   if (spte == NULL)
-    {
-      lock_release (&lock);
       return NULL; // fail in malloc
-    }
   spte->user_vaddr = user_vaddr;
   spte->dirty = isDirty;
   spte->accessed = isAccessed;
