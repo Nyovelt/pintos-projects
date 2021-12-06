@@ -108,6 +108,9 @@ syscall_handler (struct intr_frame *f UNUSED)
 {
   /* First check if f->esp is a valid pointer */
   is_valid_ptr (f->esp, 0);
+#ifdef VM
+  thread_current ()->esp = f->esp;
+#endif
 
   switch (*(int *) f->esp)
     {

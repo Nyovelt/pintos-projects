@@ -139,6 +139,7 @@ struct thread
 #ifdef VM
     /* Owned by vm/page.c. */
     struct hash sup_page_table; // 页表
+    void *esp;                  // 临时的esp
 #endif
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */

@@ -29,7 +29,7 @@ frame_init ()
 }
 
 void *
-frame_get (enum palloc_flags flags, struct sup_page_entry *upage)
+frame_get (enum palloc_flags flags, struct sup_page_table_entry *upage)
 {
   /* Validating the address */
   /* Within 32 bytes of the stack pointer */
@@ -64,7 +64,7 @@ frame_get (enum palloc_flags flags, struct sup_page_entry *upage)
 }
 
 void
-frame_evict (enum palloc_flags flags, struct sup_page_entry *upage)
+frame_evict (enum palloc_flags flags, struct sup_page_table_entry *upage)
 {
   lock_acquire (&lock); // Not sure
   /* if dirty, evict to swap, which we havn't implemented yet */

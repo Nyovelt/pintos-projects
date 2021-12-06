@@ -1,6 +1,7 @@
 #ifndef VM_PAGE_H
 #define VM_PAGE_H
 
+#include "vm/frame.h"
 #include <stdbool.h>
 #include <stdint.h>
 #include <hash.h>
@@ -8,6 +9,7 @@
 struct sup_page_table_entry
 {
     struct hash_elem hash_elem;
+    struct frame_table_entry *frame;
     void *user_vaddr;     // virtual address of the page
     void *phys_addr;      // physical address of the page
     bool present;         // is the page present in memory?
@@ -23,4 +25,4 @@ void page_init (void);
 void *page_create (void *user_vaddr); // TODO: more args?
 void page_free (void *user_vaddr);
 struct sup_page_table_entry *page_lookup (const void *user_vaddr);
-bool page_fault_handler (const void *addr);
+bool page_fault_handler (const void *addr, void *esp);
