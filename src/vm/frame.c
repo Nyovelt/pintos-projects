@@ -41,6 +41,7 @@ frame_get (enum palloc_flags flags, struct sup_page_entry *upage)
   if (frame == NULL)
     {
       lock_release (&lock);
+      // I suppose evict happens here
       return NULL;
     }
 
@@ -62,6 +63,21 @@ frame_get (enum palloc_flags flags, struct sup_page_entry *upage)
   return frame;
 }
 
+void
+frame_evict (enum palloc_flags flags, struct sup_page_entry *upage)
+{
+  lock_acquire (&lock); // Not sure
+  /* if dirty, evict to swap, which we havn't implemented yet */
+  // if (upage->dirty_bit)
+  //   {
+  //     // current do nothing
+  //   }
+  /* if not dirty, evict to frame */
+  // struct frame_table_entry *e = frame_lookup ();
+  lock_release (&lock);
+}
+
+
 struct frame_table_entry *
 frame_lookup (const void *frame)
 {
@@ -71,4 +87,15 @@ frame_lookup (const void *frame)
   f.frame = frame;
   e = hash_find (&frame_table, &f.hash_elem);
   return e != NULL ? hash_entry (e, struct frame_table_entry, hash_elem) : NULL;
+}
+
+
+void
+frame_free (struct frame_table_entry *fte)
+{
+  lock_acquire (&lock);
+  hash_delete (&frame_table, &fte->hash_elem);
+  palloc_free_page (fte->frame);
+  free (fte);
+  lock_release (&lock); // gen by copilot
 }

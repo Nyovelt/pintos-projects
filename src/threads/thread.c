@@ -14,7 +14,9 @@
 #ifdef USERPROG
 #include "userprog/process.h"
 #endif
-
+#ifdef VM
+#include "vm/page.h"
+#endif
 /* Random value for struct thread's `magic' member.
    Used to detect stack overflow.  See the big comment at the top
    of thread.h for details. */
@@ -484,6 +486,9 @@ init_thread (struct thread *t, const char *name, int priority)
   t->self = NULL;                       // 初始化可执行文件
 #endif
 
+#ifdef VM
+  // hash_init (&t->page_table, page_hash, page_less, NULL);); // 初始化页表
+#endif /* Project 3 */
 
   old_level = intr_disable ();
   list_push_back (&all_list, &t->allelem);

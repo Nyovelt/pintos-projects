@@ -3,9 +3,11 @@
 
 #include <debug.h>
 #include <list.h>
+#include <hash.h>
 #include <stdint.h>
 
 #include "threads/synch.h" // lock
+
 
 /* States in a thread's life cycle. */
 enum thread_status
@@ -134,6 +136,10 @@ struct thread
     struct file *self;                // identify the execute file
 #endif
 
+#ifdef VM
+    /* Owned by vm/page.c. */
+    struct hash sup_page_table; // 页表
+#endif
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
   };
