@@ -1,3 +1,6 @@
+#ifndef VM_FRAME_H
+#define VM_FRAME_H
+
 #include <hash.h>
 #include "threads/palloc.h"
 
@@ -13,3 +16,5 @@ struct frame_table_entry
 void frame_init (void); // Initialize frame table
 void *frame_get (enum palloc_flags flags, struct sup_page_entry *upage);
 struct frame_table_entry *frame_lookup (const void *frame);
+
+#endif /* vm/frame.h */
