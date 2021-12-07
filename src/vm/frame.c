@@ -33,8 +33,8 @@ frame_get (enum palloc_flags flags, struct sup_page_table_entry *upage)
 {
   /* Validating the address */
   /* Within 32 bytes of the stack pointer */
-  if (!is_user_vaddr (upage) || !is_user_vaddr ((void *) upage + sizeof (void *) - 1))
-    return NULL;
+  // if (!is_user_vaddr (upage) || !is_user_vaddr ((void *) upage + sizeof (void *) - 1))
+  //   return NULL;
 
   lock_acquire (&lock);
   void *frame = palloc_get_page (flags);
@@ -60,6 +60,7 @@ frame_get (enum palloc_flags flags, struct sup_page_table_entry *upage)
   hash_insert (&frame_table, &fte->hash_elem);
 
   lock_release (&lock);
+
   return frame;
 }
 

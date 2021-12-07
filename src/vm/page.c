@@ -57,6 +57,7 @@ page_entry_init (struct hash *spt, void *user_vaddr, bool isDirty, bool isAccess
   return spte;
 }*/
 
+
 bool
 page_record (struct hash *spt, void *upage, bool writable, struct file *file, off_t ofs, uint32_t read_bytes)
 {
@@ -101,9 +102,33 @@ page_load (struct hash *spt, void *user_vaddr, bool write, void *esp)
         return false;      // fail in frame_get
       spte->frame = frame; // 把这个页填进去
       spte->user_vaddr = user_vaddr;
+      spte->swapped = false;
       if (!install_page (user_vaddr, frame, spte->writable))
         return false; // fail in install_page
       return true;
+    }
+  else
+    {
+
+      void *frame = frame_get (PAL_USER, spte);
+      if (frame == NULL)
+        return false; // fail in frame_get
+                      // install page and frame
+      if (!install_page (user_vaddr, frame, spte->writable))
+        return false; // fail in install_page
+      if (spte->swapped)
+        {
+          // then it is swap
+        }
+      else
+        {
+          // 打开文件
+          if (spte->file == NULL)
+            return false; // fail in check file
+          if (file_read_at (spte->file, frame, spte->file_end, spte->file_ofs) == 0)
+            return false;
+        }
+      spte->frame = frame;
     }
 };
                        
