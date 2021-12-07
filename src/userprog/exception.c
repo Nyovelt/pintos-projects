@@ -157,7 +157,7 @@ page_fault (struct intr_frame *f)
        valid user page fault. */
   /* get stack pointer(user or kernel). */
   void *esp = user ? f->esp : thread_current ()->esp;
-  if (not_present && page_fault_handler (fault_addr, esp))
+  if (not_present && page_fault_handler (&thread_current()->sup_page_table, fault_addr, write, esp))
     {
       //printf ('OK');
       return;
