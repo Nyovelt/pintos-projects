@@ -9,6 +9,7 @@
 #include "vm/page.h"
 #include "filesys/file.h"
 #include "lib/user/syscall.h"
+#include "threads/vaddr.h"
 /* Number of page faults processed. */
 static long long page_fault_cnt;
 
@@ -126,6 +127,7 @@ kill (struct intr_frame *f)
 static void
 page_fault (struct intr_frame *f) 
 {
+
   bool not_present;  /* True: not-present page, false: writing r/o page. */
   bool write;        /* True: access was write, false: access was read. */
   bool user;         /* True: access by user, false: access by kernel. */
@@ -157,13 +159,13 @@ page_fault (struct intr_frame *f)
        valid user page fault. */
   /* get stack pointer(user or kernel). */
   void *esp = user ? f->esp : thread_current ()->esp;
-  if (not_present && page_fault_handler (&thread_current()->sup_page_table, fault_addr, write, esp))
+  if (not_present && page_fault_handler (&thread_current ()->sup_page_table, fault_addr, write, esp))
     {
-      //printf ('OK');
+      // printf ("                  114514                        \n");
       return;
     }
 #endif
-
+  // printf ("                  1919810                        \n");
   /* To implement virtual memory, delete the rest of the function
      body, and replace it with code that brings in the page to
      which fault_addr refers. */

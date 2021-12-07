@@ -99,6 +99,11 @@ main (void)
   malloc_init ();
   paging_init ();
 
+/* Project 3 */
+#ifdef VM
+  frame_init();
+#endif
+
   /* Segmentation. */
 #ifdef USERPROG
   tss_init ();
