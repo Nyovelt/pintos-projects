@@ -89,9 +89,13 @@ page_load (struct hash *spt, void *user_vaddr, bool write)
   if (spte == NULL || (spte->present && spte->swapped) || (write && !spte->writable))
     return false;
 
-  void *frame = frame_get()
+  void *frame = frame_get(PAL_USER,spte);
+  if (frame == NULL)
+    return false; // fail in frame_get
+  spte -> frame = frame;
+  return true;
 };
-
+                       
 void
 page_free (struct hash *spt, void *user_vaddr)
 {
