@@ -19,6 +19,9 @@
 #include "threads/thread.h"
 #include "threads/vaddr.h"
 #include "devices/timer.h"
+#ifdef VM
+#include "vm/page.h"
+#endif
 
 #define ARGS_LIMIT 128
 
@@ -104,6 +107,11 @@ start_process (void *argv)
   if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
+
+#ifdef VM
+  page_init (&thread_current ()->sup_page_table);
+#endif
+
   success = load (file_name, &if_.eip, &if_.esp, argv); // load access to filename as well as args
 
   if (!success)
@@ -506,10 +514,6 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
   ASSERT (pg_ofs (upage) == 0);
   ASSERT (ofs % PGSIZE == 0);
 
-  #ifdef VM
-    return true;
-  #endif
-
   file_seek (file, ofs);
   while (read_bytes > 0 || zero_bytes > 0) 
     {
@@ -519,6 +523,11 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
       size_t page_zero_bytes = PGSIZE - page_read_bytes;
 
+#ifdef VM
+      if (!page_record (&thread_current ()->sup_page_table, upage, writable, file, ofs, page_read_bytes))
+        return false;
+      ofs += PGSIZE;
+#else
       /* Get a page of memory. */
       uint8_t *kpage = palloc_get_page (PAL_USER);
       if (kpage == NULL)
@@ -538,6 +547,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
           palloc_free_page (kpage);
           return false; 
         }
+#endif
 
       /* Advance. */
       read_bytes -= page_read_bytes;

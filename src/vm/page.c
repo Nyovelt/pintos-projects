@@ -1,16 +1,13 @@
 #include <hash.h>
 #include "stdbool.h"
 #include "vm/page.h"
+#include "vm/frame.h"
 #include "threads/vaddr.h"
 #include "threads/thread.h"
 #include "threads/malloc.h"
 #include "userprog/process.h"
 
-
-static struct hash sup_page_table;
-static struct lock lock;
-
-#define STACK_MAX_SIZE (0x800000)
+#define STACK_MAX_SIZE (0x800000) // 8 MB
 
 /* return a hash value of page e */
 static unsigned
@@ -29,97 +26,90 @@ spte_less (const struct hash_elem *a, const struct hash_elem *b, void *aux UNUSE
   return spte_a->user_vaddr < spte_b->user_vaddr;
 }
 
-static struct sup_page_table_entry *
-page_entry_init (void *user_vaddr, bool isDirty, bool isAccessed)
-{
-  // TODO: lock? directly use malloc?
-  struct sup_page_table_entry *spte = malloc (sizeof (struct sup_page_table_entry));
-  if (spte == NULL)
-      return NULL; // fail in malloc
-  spte->user_vaddr = user_vaddr;
-  spte->dirty = isDirty;
-  spte->accessed = isAccessed;
-  return spte;
-}
-
 void
-page_init ()
+page_init (struct hash *spt)
 {
-  hash_init (&sup_page_table, spte_hash, spte_less, NULL);
-  lock_init (&lock);
-}
-
-void *
-page_create (void *user_vaddr)
-{
-  lock_acquire (&lock);
-  struct sup_page_table_entry *spte = page_entry_init (user_vaddr, false, false);
-  if (spte == NULL)
-    {
-      lock_release (&lock);
-      return NULL; // fail in init_page
-    }
-  if (hash_insert (&thread_current ()->sup_page_table, &spte->hash_elem) == NULL)
-    {
-      lock_release (&lock);
-      return NULL; // fail in hash_insert
-    }
-  // get a frame
-  struct frame_table_entry *fe = frame_get (PAL_USER, spte);
-  if (fe == NULL)
-    {
-      lock_release (&lock);
-      return NULL; // fail in frame_get
-    }
-
-  // install
-  spte->frame = fe;
-  // TODO: and other things...
-  if (!install_page (user_vaddr, fe->frame, true))
-    {
-      page_free (user_vaddr);
-      lock_release (&lock);
-      return NULL; // fail in install_page
-    }
-  lock_release (&lock);
-  return spte;
-};
-
-void
-page_free (void *user_vaddr)
-{
-  lock_acquire (&lock);
-  struct sup_page_table_entry *spte = page_lookup (user_vaddr);
-  if (spte == NULL)
-    {
-      lock_release (&lock);
-      return; // fail in get_spte
-    }
-  hash_delete (&thread_current ()->sup_page_table, &spte->hash_elem);
-  free (spte);
-  lock_release (&lock);
+  hash_init (spt, spte_hash, spte_less, NULL);
 }
 
 /* return the page which has the address */
-struct sup_page_table_entry *
-page_lookup (const void *user_vaddr)
+static struct sup_page_table_entry *
+page_lookup (struct hash *spt ,const void *vaddr)
 {
   struct sup_page_table_entry spte;
   struct hash_elem *e;
 
-  spte.user_vaddr = user_vaddr;
-  e = hash_find (&thread_current ()->sup_page_table, &spte.hash_elem);
+  spte.user_vaddr = vaddr;
+  e = hash_find (spt, &spte.hash_elem);
   return e != NULL
              ? hash_entry (e, struct sup_page_table_entry, hash_elem)
              : NULL;
 }
 
+/*static struct sup_page_table_entry *
+page_entry_init (struct hash *spt, void *user_vaddr, bool isDirty, bool isAccessed)
+{
+  // TODO: lock? directly use malloc?
+  struct sup_page_table_entry *spte = malloc (sizeof (struct sup_page_table_entry));
+  if (spte == NULL)
+    return NULL; // fail in malloc
+  spte->user_vaddr = user_vaddr;
+  return spte;
+}*/
+
 bool
-page_fault_handler (const void *addr, void *esp)
+page_record (struct hash *spt, void *upage, bool writable, struct file *file, off_t ofs, uint32_t read_bytes)
+{
+  if (page_lookup (spt, upage) != NULL)
+    return false; // already exist
+
+  struct sup_page_table_entry *spte = malloc (sizeof (struct sup_page_table_entry));
+  if (spte == NULL)
+    return false; // fail in malloc
+
+  spte->user_vaddr = upage;
+  spte->phys_addr = NULL;
+  spte->present = false;
+  spte->writable = writable;
+  spte->swapped = false;
+  spte->file = file;
+  spte->file_ofs = ofs;
+  spte->file_end = read_bytes;
+
+  if (hash_insert (spt, &spte->hash_elem) == NULL)
+    return false; // fail in hash_insert
+
+  return true;
+}
+
+bool
+page_load (struct hash *spt, void *user_vaddr, bool write)
+{
+  struct sup_page_table_entry *spte = page_lookup (spt, user_vaddr);
+  if (spte == NULL || (spte->present && spte->swapped) || (write && !spte->writable))
+    return false;
+
+  void *frame = frame_get()
+};
+
+void
+page_free (struct hash *spt, void *user_vaddr)
+{
+  struct sup_page_table_entry *spte = page_lookup (user_vaddr);
+  if (spte == NULL)
+    {
+      return; // fail in get_spte
+    }
+  hash_delete (&thread_current ()->sup_page_table, &spte->hash_elem);
+  free (spte);
+}
+
+bool
+page_fault_handler (struct hash *spt, const void *addr, void *esp)
 
 {
   //return true;
-  if (addr == NULL || is_kernel_vaddr (addr)) //TODO: discuss
+  if (addr == NULL || is_kernel_vaddr (addr)) // TODO: discuss
     return false;                             // fail in addr
 
   // check addr is in spt
@@ -139,8 +129,6 @@ page_fault_handler (const void *addr, void *esp)
       if (spte != NULL)
         return true;
     }
-  else
-    {
-      return false; // real page fault
-    }
+
+  return false; // real page fault
 }

@@ -11,7 +11,7 @@ struct frame_table_entry
     struct thread *owner;       // owner of the frame
     struct sup_page_table_entry *aux; // auxiliary page entry
     // maybe other info
-    bool dirty_bit;
+    bool dirty;
 };
 
 void frame_init (void); // Initialize frame table
