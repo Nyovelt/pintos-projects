@@ -83,7 +83,7 @@ page_record (struct hash *spt, void *upage, bool writable, struct file *file, of
 }
 
 bool
-page_load (struct hash *spt, void *user_vaddr, bool write)
+page_load (struct hash *spt, void *user_vaddr, bool write, void *esp)
 {
   struct sup_page_table_entry *spte = page_lookup (spt, user_vaddr);
   if (spte == NULL || (spte->present && spte->swapped) || (write && !spte->writable))
@@ -109,7 +109,7 @@ page_free (struct hash *spt, void *user_vaddr)
 }
 
 bool
-page_fault_handler (struct hash *spt, const void *addr, void *esp)
+page_fault_handler (struct hash *spt, const void *addr, bool write, void *esp)
 
 {
   //return true;

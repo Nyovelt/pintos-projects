@@ -28,6 +28,6 @@ struct sup_page_table_entry
 
 void page_init (struct hash *spt);
 bool page_record (struct hash *spt, void *upage, bool writable, struct file *file, off_t ofs, uint32_t read_bytes); // TODO: more args?
-bool page_load (struct hash *spt, void *vaddr, bool write);
+bool page_load (struct hash *spt, void *vaddr, bool write, void* esp);
 void page_free (struct hash *spt, void *vaddr);
-bool page_fault_handler (struct hash *spt, const void *addr, void *esp);
+bool page_fault_handler (struct hash *spt, const void *addr, bool write, void *esp);
