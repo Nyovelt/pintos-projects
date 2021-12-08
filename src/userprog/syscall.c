@@ -180,14 +180,14 @@ syscall_handler (struct intr_frame *f UNUSED)
     /* Prriject 3 */
     case SYS_MMAP:
       is_valid_ptr (f->esp, 2);
-      printf ("SYSCALL MMAP\n");
+      //printf ("SYSCALL MMAP\n");
 
       f->eax = syscall_mmap (*((int *) f->esp + 1),
                              *((void **) f->esp + 2)); //FIXME:
       break;
     case SYS_MUNMAP:
       is_valid_ptr (f->esp, 1);
-      printf ("SYSCALL MUNMAP\n");
+      //printf ("SYSCALL MUNMAP\n");
 
       syscall_munmap (*((int *) f->esp + 1)); //FIXME:
       break;
