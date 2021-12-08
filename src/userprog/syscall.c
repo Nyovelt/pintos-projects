@@ -1,5 +1,7 @@
 #include "userprog/syscall.h"
 #include <syscall-nr.h>
+#include "lib/user/syscall.h"
+#include "userprog/pagedir.h"
 #include <stdio.h>
 #include <stdbool.h>
 #include <string.h>
@@ -35,7 +37,9 @@ static void syscall_seek (int fd, unsigned position);
 static unsigned syscall_tell (int fd);
 static pid_t syscall_exec (const char *cmd_line);
 static int syscall_wait (pid_t pid);
-
+mapid_t mmap (int fd, void *addr);
+static void syscall_mmap (int fd, const void *addr);
+static void syscall_munmap (mapid_t mapid);
 void
 syscall_init (void)
 {
@@ -169,6 +173,17 @@ syscall_handler (struct intr_frame *f UNUSED)
       is_valid_ptr (f->esp, 1);
       f->eax = syscall_close (*((int *) f->esp + 1));
       break;
+    /* Prriject 3 */
+    case SYS_MMAP:
+      is_valid_ptr (f->esp, 2);
+      printf ("SYSCALL MMAP\n");
+      break;
+      syscall_mmap (*((int *) f->esp + 1), *((void **) f->esp + 2)); //FIXME:
+    case SYS_MUNMAP:
+      is_valid_ptr (f->esp, 1);
+      printf ("SYSCALL MUNMAP\n");
+      break;
+      syscall_munmap (*((int *) f->esp + 1)); //FIXME:
     default:
       printf ("unknown syscall.\n");
     }
@@ -373,4 +388,19 @@ syscall_wait (pid_t pid)
   if (pid == -1)
     return -1;
   return process_wait (pid);
+}
+
+
+static void
+syscall_munmap (mapid_t mapid)
+{
+}
+
+mapid_t
+mmap (int fd, void *addr)
+{
+}
+static void
+muunmap (mapid_t mapping)
+{
 }
