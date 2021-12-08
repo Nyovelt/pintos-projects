@@ -11,7 +11,7 @@
 #include "filesys/file.h"
 
 //#define STACK_MAX_SIZE (0x800000) // 8 MB
-#define STACK_LIMIT ((void *)PHYS_BASE - (0x800000))
+#define STACK_LIMIT ((void *) PHYS_BASE - (0x800000))
 
 /* return a hash value of page e */
 static unsigned
@@ -87,7 +87,7 @@ page_record (struct hash *spt, void *upage, bool writable, struct file *file, of
       return false; // fail in hash_insert
     }
 
-  //printf ("recorded. %s:%d ,ADDR: %p\n", __FILE__, __LINE__, upage);
+  printf ("recorded. %s:%d ,ADDR: %p\n", __FILE__, __LINE__, upage);
   return true;
 }
 
@@ -105,8 +105,8 @@ page_load (struct hash *spt, void *vaddr, bool write, void *esp)
       spte = malloc (sizeof (struct sup_page_table_entry));
       if (spte == NULL)
         return false; // fail in malloc    // fail in frame_get
-      
-      frame = frame_get (PAL_USER, spte);                     // 去抓一段空的物理地址给这个页表
+
+      frame = frame_get (PAL_USER, spte); // 去抓一段空的物理地址给这个页表
       memset (frame, 0, PGSIZE);
       spte->writable = true;
       //printf ("zeroed page, %s:%d\n, UPAGE: %p\n, ESP: %p", __FILE__, __LINE__, upage, esp);
@@ -123,7 +123,7 @@ page_load (struct hash *spt, void *vaddr, bool write, void *esp)
           if (spte->file == NULL)
             return false; // fail in check file
           //printf ("read file, %s:%d\n", __FILE__, __LINE__);
-          frame = frame_get (PAL_USER, spte);                     // 去抓一段空的物理地址给这个页表
+          frame = frame_get (PAL_USER, spte); // 去抓一段空的物理地址给这个页表
 
           if (file_read_at (spte->file, frame, spte->file_size, spte->file_ofs) != (off_t) spte->file_size)
             {
@@ -172,9 +172,9 @@ page_fault_handler (struct hash *spt, const void *addr, bool write, void *esp)
   if (addr == NULL || is_kernel_vaddr (addr)) // 有错就真的错
     return false;
 
-  if (addr < PHYS_BASE)// && addr >= STACK_LIMIT && addr >= esp - 32)
+  if (is_user_vaddr(addr)) // && addr >= STACK_LIMIT && addr >= esp - 32)
     {
-      //printf ("fake fault. %s:%d ,ADDR: %p, UPPER: %p, LOWER: %p , STACK: %p\n", __FILE__, __LINE__, addr, PHYS_BASE, STACK_LIMIT, esp - 32);
+      printf ("fake fault. %s:%d ,ADDR: %p, UPPER: %p, LOWER: %p , STACK: %p\n", __FILE__, __LINE__, addr, PHYS_BASE, STACK_LIMIT, esp - 32);
       if (page_load (spt, addr, write, esp))
         return true; // 成功解决了
     }

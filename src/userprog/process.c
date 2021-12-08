@@ -531,8 +531,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
         {
           return false;
         }
-      ofs += PGSIZE; //TODO: twice ?
-                     //printf ("%s:%d \n", __FILE__, __LINE__);
+      ofs += PGSIZE;
 #else
       /* Get a page of memory. */
       uint8_t *kpage = palloc_get_page (PAL_USER);
