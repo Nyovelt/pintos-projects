@@ -174,6 +174,5 @@ page_fault_handler (struct hash *spt, const void *addr, bool write, void *esp)
       if (page_load (spt, addr, write, esp))
         return true; // 成功解决了
     }
-  //printf ("real fault. %s:%d ,ADDR: %p, UPPER: %p, LOWER: %p , STACK: %p\n", __FILE__, __LINE__, addr, PHYS_BASE, STACK_LIMIT, esp - 32);
   return false; // 真的错了
 }
