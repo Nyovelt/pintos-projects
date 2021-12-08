@@ -87,7 +87,7 @@ page_record (struct hash *spt, void *upage, bool writable, struct file *file, of
       return false; // fail in hash_insert
     }
 
-  printf ("recorded. %s:%d ,ADDR: %p\n", __FILE__, __LINE__, upage);
+  //printf ("recorded. %s:%d ,ADDR: %p\n", __FILE__, __LINE__, upage);
   return true;
 }
 
@@ -174,7 +174,7 @@ page_fault_handler (struct hash *spt, const void *addr, bool write, void *esp)
 
   if (is_user_vaddr(addr)) // && addr >= STACK_LIMIT && addr >= esp - 32)
     {
-      printf ("fake fault. %s:%d ,ADDR: %p, UPPER: %p, LOWER: %p , STACK: %p\n", __FILE__, __LINE__, addr, PHYS_BASE, STACK_LIMIT, esp - 32);
+      //printf ("fake fault. %s:%d ,ADDR: %p, UPPER: %p, LOWER: %p , STACK: %p\n", __FILE__, __LINE__, addr, PHYS_BASE, STACK_LIMIT, esp - 32);
       if (page_load (spt, addr, write, esp))
         return true; // 成功解决了
     }
