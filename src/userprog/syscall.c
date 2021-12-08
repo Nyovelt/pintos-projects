@@ -52,7 +52,11 @@ syscall_init (void)
 static inline bool
 is_valid_addr (const void *addr)
 {
+#ifdef VM
+  return is_user_vaddr (addr);
+#else
   return is_user_vaddr (addr) && pagedir_get_page (thread_current ()->pagedir, addr);
+#endif
 }
 
 static inline void
