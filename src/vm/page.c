@@ -70,6 +70,7 @@ page_record (struct hash *spt, const void *upage, bool writable, struct file *fi
 
   if (hash_insert (spt, &spte->hash_elem) != NULL)
     {
+      free (spte);
       return false; // fail in hash_insert
     }
 
