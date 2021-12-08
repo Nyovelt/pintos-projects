@@ -37,7 +37,7 @@ page_init (struct hash *spt)
 }
 
 /* return the page which has the address */
-static struct sup_page_table_entry *
+struct sup_page_table_entry *
 page_lookup (struct hash *spt, const void *addr)
 {
   struct sup_page_table_entry spte;

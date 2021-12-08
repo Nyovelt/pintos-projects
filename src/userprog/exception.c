@@ -8,7 +8,7 @@
 #include "vm/frame.h"
 #include "vm/page.h"
 #include "filesys/file.h"
-#include "lib/user/syscall.h"
+#include "userprog/syscall.h"
 #include "threads/vaddr.h"
 /* Number of page faults processed. */
 static long long page_fault_cnt;
@@ -154,27 +154,22 @@ page_fault (struct intr_frame *f)
   write = (f->error_code & PF_W) != 0;
   user = (f->error_code & PF_U) != 0;
 
-  #ifdef VM
+#ifdef VM
    /* If this is a user page fault, we need to check if it is a
        valid user page fault. */
   /* get stack pointer(user or kernel). */
   void *esp = user ? f->esp : thread_current ()->esp;
   //printf("frame: %p, thread_current: %p, esp: %p\n", f->esp, thread_current ()->esp, esp);
   if (not_present && page_fault_handler (&thread_current ()->sup_page_table, fault_addr, write, esp))
-    {
-      // printf ("                  114514                        \n");
-      return;
-    }
+    return;
 #endif
-  // printf ("                  1919810                        \n");
   /* To implement virtual memory, delete the rest of the function
      body, and replace it with code that brings in the page to
      which fault_addr refers. */
-  //   printf ("Page fault at %p: %s error %s page in %s context.\n",
-  //           fault_addr,
-  //           not_present ? "not present" : "rights violation",
-  //           write ? "writing" : "reading",
-  //           user ? "user" : "kernel");
+  printf ("Page fault at %p: %s error %s page in %s context.\n",
+          fault_addr,
+          not_present ? "not present" : "rights violation",
+          write ? "writing" : "reading",
+          user ? "user" : "kernel");
   kill (f);
 }
-

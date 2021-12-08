@@ -14,7 +14,7 @@ struct sup_page_table_entry
     const void *vaddr;          // virtual address of the page
     bool writable;        // is the page writable?
     bool swapped;         // is the page swapped?
-    bool is_stack;        // is the page in user stack?
+    bool is_stack;        // is the page in user stack (or in .data/.text)?
     uint64_t access_time; // time of last access
 
     /* For fole operations */
@@ -28,5 +28,6 @@ struct sup_page_table_entry
 void page_init (struct hash *spt);
 bool page_record (struct hash *spt, const void *upage, bool writable, struct file *file, off_t ofs, uint32_t read_bytes, bool in_stack); // TODO: more args?
 bool page_load (struct hash *spt, const void *vaddr, bool write, void *esp);
+struct sup_page_table_entry *page_lookup (struct hash *spt, const void *addr);
 void page_free (struct hash *spt, const void *vaddr);
 bool page_fault_handler (struct hash *spt, const void *addr, bool write, void *esp);
