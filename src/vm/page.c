@@ -18,7 +18,7 @@ static unsigned
 spte_hash (const struct hash_elem *e, void *aux UNUSED)
 {
   const struct sup_page_table_entry *spte = hash_entry (e, struct sup_page_table_entry, hash_elem);
-  return hash_bytes (&spte->user_vaddr, sizeof spte->user_vaddr);
+  return hash_bytes (&spte->vaddr, sizeof spte->vaddr);
 }
 
 /* return True if a is lower than b*/
@@ -27,7 +27,7 @@ spte_less (const struct hash_elem *a, const struct hash_elem *b, void *aux UNUSE
 {
   const struct sup_page_table_entry *spte_a = hash_entry (a, struct sup_page_table_entry, hash_elem);
   const struct sup_page_table_entry *spte_b = hash_entry (b, struct sup_page_table_entry, hash_elem);
-  return spte_a->user_vaddr < spte_b->user_vaddr;
+  return spte_a->vaddr < spte_b->vaddr;
 }
 
 void
@@ -38,32 +38,20 @@ page_init (struct hash *spt)
 
 /* return the page which has the address */
 static struct sup_page_table_entry *
-page_lookup (struct hash *spt, const void *vaddr)
+page_lookup (struct hash *spt, const void *addr)
 {
   struct sup_page_table_entry spte;
   struct hash_elem *e;
 
-  spte.user_vaddr = vaddr;
+  spte.vaddr = addr;
   e = hash_find (spt, &spte.hash_elem);
   return e != NULL
              ? hash_entry (e, struct sup_page_table_entry, hash_elem)
              : NULL;
 }
 
-/*static struct sup_page_table_entry *
-page_entry_init (struct hash *spt, void *user_vaddr, bool isDirty, bool isAccessed)
-{
-  // TODO: lock? directly use malloc?
-  struct sup_page_table_entry *spte = malloc (sizeof (struct sup_page_table_entry));
-  if (spte == NULL)
-    return NULL; // fail in malloc
-  spte->user_vaddr = user_vaddr;
-  return spte;
-}*/
-
-
 bool
-page_record (struct hash *spt, void *upage, bool writable, struct file *file, off_t ofs, uint32_t read_bytes)
+page_record (struct hash *spt, const void *upage, bool writable, struct file *file, off_t ofs, uint32_t read_bytes)
 {
   if (page_lookup (spt, upage) != NULL)
     {
@@ -73,9 +61,7 @@ page_record (struct hash *spt, void *upage, bool writable, struct file *file, of
   struct sup_page_table_entry *spte = malloc (sizeof (struct sup_page_table_entry));
   if (spte == NULL)
     return false; // fail in malloc
-  spte->user_vaddr = upage;
-  spte->phys_addr = NULL;
-  spte->present = false;
+  spte->vaddr = upage;
   spte->writable = writable;
   spte->swapped = false;
   spte->file = file;
@@ -92,7 +78,7 @@ page_record (struct hash *spt, void *upage, bool writable, struct file *file, of
 }
 
 bool
-page_load (struct hash *spt, void *vaddr, bool write, void *esp)
+page_load (struct hash *spt, const void *vaddr, bool write)
 {
   void *upage = pg_round_down (vaddr);
   struct sup_page_table_entry *spte = page_lookup (spt, upage); // 在补充页表里找在不在
@@ -108,7 +94,6 @@ page_load (struct hash *spt, void *vaddr, bool write, void *esp)
 
       frame = frame_get (PAL_USER, spte); // 去抓一段空的物理地址给这个页表
       memset (frame, 0, PGSIZE);
-      spte->writable = true;
       //printf ("zeroed page, %s:%d\n, UPAGE: %p\n, ESP: %p", __FILE__, __LINE__, upage, esp);
     }
   else
@@ -132,7 +117,6 @@ page_load (struct hash *spt, void *vaddr, bool write, void *esp)
             }
           memset (frame + spte->file_size, 0, PGSIZE - spte->file_size);
         }
-      spte->writable = true;
       //printf ("read file, %s:%d\n", __FILE__, __LINE__);
     }
 
@@ -146,16 +130,16 @@ page_load (struct hash *spt, void *vaddr, bool write, void *esp)
     }
 
   spte->frame = frame; // 把这个页填进去
-  spte->user_vaddr = upage;
-  spte->present = true;
+  spte->vaddr = upage;
+  spte->writable = write;
   spte->swapped = false;
   return true;
 };
 
 void
-page_free (struct hash *spt, void *user_vaddr)
+page_free (struct hash *spt, const void *vaddr)
 {
-  struct sup_page_table_entry *spte = page_lookup (spt, user_vaddr);
+  struct sup_page_table_entry *spte = page_lookup (spt, vaddr);
   if (spte == NULL)
     {
       return; // fail in get_spte
@@ -175,7 +159,7 @@ page_fault_handler (struct hash *spt, const void *addr, bool write, void *esp)
   if (is_user_vaddr(addr)) // && addr >= STACK_LIMIT && addr >= esp - 32)
     {
       //printf ("fake fault. %s:%d ,ADDR: %p, UPPER: %p, LOWER: %p , STACK: %p\n", __FILE__, __LINE__, addr, PHYS_BASE, STACK_LIMIT, esp - 32);
-      if (page_load (spt, addr, write, esp))
+      if (page_load (spt, addr, write))
         return true; // 成功解决了
     }
   //printf ("real fault. %s:%d ,ADDR: %p, UPPER: %p, LOWER: %p , STACK: %p\n", __FILE__, __LINE__, addr, PHYS_BASE, STACK_LIMIT, esp - 32);
