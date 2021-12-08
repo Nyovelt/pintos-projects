@@ -5,9 +5,9 @@
 #include <list.h>
 #include <hash.h>
 #include <stdint.h>
-#include "lib/user/syscall.h"
+// #include "lib/user/syscall.h"
 #include "threads/synch.h" // lock
-
+typedef int mapid_t;
 
 /* States in a thread's life cycle. */
 enum thread_status

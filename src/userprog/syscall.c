@@ -42,6 +42,7 @@ static int syscall_wait (pid_t pid);
 mapid_t mmap (int fd, void *addr);
 static mapid_t syscall_mmap (int fd, const void *addr);
 static void syscall_munmap (mapid_t mapid);
+static struct mmap_descriptor *get_mmap_descriptor (mapid_t id);
 void
 syscall_init (void)
 {
@@ -180,14 +181,16 @@ syscall_handler (struct intr_frame *f UNUSED)
     case SYS_MMAP:
       is_valid_ptr (f->esp, 2);
       printf ("SYSCALL MMAP\n");
-      break;
+
       f->eax = syscall_mmap (*((int *) f->esp + 1),
                              *((void **) f->esp + 2)); //FIXME:
+      break;
     case SYS_MUNMAP:
       is_valid_ptr (f->esp, 1);
       printf ("SYSCALL MUNMAP\n");
-      break;
+
       syscall_munmap (*((int *) f->esp + 1)); //FIXME:
+      break;
     default:
       printf ("unknown syscall.\n");
     }
@@ -440,14 +443,15 @@ syscall_mmap (int fd, const void *addr)
 
       if (spte == NULL)
         return -1;                                   // 创建失败，返回 -1
-      void *frame = frame_get_page (PAL_USER, spte); // 获取一个空闲页面
+      void *frame = frame_get (PAL_USER, spte);      // 获取一个空闲页面
 
       // 插，进程补充页表，frame，file，offset = i， 大小为 pagesize 或者 size % pagesize， 可读可写
       if (!page_record (&thread_current ()->sup_page_table, frame, true,
                         f->file, i,
                         file_length (f->file) % PGSIZE == 0
                             ? PGSIZE
-                            : file_length (f->file) % PGSIZE))
+                            : file_length (f->file) % PGSIZE,
+                        false))
         {
           lock_release (&file_lock);
           return -1;
@@ -485,8 +489,8 @@ syscall_munmap (mapid_t mapid)
           return;
         }
       //TODO: consider
-      frame_free_page (spte->frame);
-      page_remove (&thread_current ()->sup_page_table, i);
+      frame_free (spte->frame);
+      page_free (&thread_current ()->sup_page_table, i);
     }
   //TODO: 是否需要占用这个文件 (reopen)
   list_remove (&_mmap_descriptor->elem);
