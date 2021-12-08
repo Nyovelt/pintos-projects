@@ -119,6 +119,7 @@ page_load (struct hash *spt, const void *vaddr, bool write, void *esp)
       else
         {
           // 打开文件
+
           if (spte->file == NULL)
             return false; // fail in check file
           //printf ("read file, %s:%d\n", __FILE__, __LINE__);

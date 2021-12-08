@@ -427,10 +427,11 @@ syscall_mmap (int fd, const void *addr)
       lock_release (&file_lock);
       return -1; // addr is not page aligned, fail
     }
+
   // whether the addr is overlapping with exsiting file map
   for (int i = 0; i < file_length (f->file); i += PGSIZE)
     {
-      if (page_lookup (thread_current ()->pagedir, addr + i) != NULL)
+      if (page_lookup (&thread_current ()->sup_page_table, addr + i) != NULL)
         {
           lock_release (&file_lock);
           return -1;
@@ -475,6 +476,7 @@ syscall_mmap (int fd, const void *addr)
 static void
 syscall_munmap (mapid_t mapid)
 {
+  return;
   lock_acquire (&file_lock);
   struct mmap_descriptor *_mmap_descriptor = get_mmap_descriptor (mapid);
   if (_mmap_descriptor == NULL)
