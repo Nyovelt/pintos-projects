@@ -51,7 +51,7 @@ page_lookup (struct hash *spt, const void *addr)
 }
 
 bool
-page_record (struct hash *spt, const void *upage, bool writable, struct file *file, off_t ofs, uint32_t read_bytes)
+page_record (struct hash *spt, const void *upage, bool writable, struct file *file, off_t ofs, uint32_t read_bytes, bool in_stack)
 {
   if (page_lookup (spt, upage) != NULL)
     {
@@ -64,6 +64,7 @@ page_record (struct hash *spt, const void *upage, bool writable, struct file *fi
   spte->vaddr = upage;
   spte->writable = writable;
   spte->swapped = false;
+  spte->is_stack = in_stack;
   spte->file = file;
   spte->file_ofs = ofs;
   spte->file_size = read_bytes;
@@ -78,7 +79,7 @@ page_record (struct hash *spt, const void *upage, bool writable, struct file *fi
 }
 
 bool
-page_load (struct hash *spt, const void *vaddr, bool write)
+page_load (struct hash *spt, const void *vaddr, bool write, void *esp)
 {
   void *upage = pg_round_down (vaddr);
   struct sup_page_table_entry *spte = page_lookup (spt, upage); // 在补充页表里找在不在
@@ -87,6 +88,9 @@ page_load (struct hash *spt, const void *vaddr, bool write)
 
   if (spte == NULL) //|| (spte->present && spte->swapped) || )
     {
+      if (vaddr < STACK_LIMIT || vaddr < esp - 32)
+          return false; // fail in frame_get
+
       // 找不到 -> 创建一个新的空页表
       spte = malloc (sizeof (struct sup_page_table_entry));
       if (spte == NULL)
@@ -96,9 +100,13 @@ page_load (struct hash *spt, const void *vaddr, bool write)
       memset (frame, 0, PGSIZE);
       //printf ("zeroed page, %s:%d\n, UPAGE: %p\n, ESP: %p", __FILE__, __LINE__, upage, esp);
       spte->writable = true;
+      spte->is_stack = true;
     }
   else
     {
+      if (spte->is_stack && (vaddr < STACK_LIMIT || vaddr < esp - 32))
+          return false; // fail in frame_get
+
       if (write && !spte->writable)
         return false;
 
@@ -160,7 +168,7 @@ page_fault_handler (struct hash *spt, const void *addr, bool write, void *esp)
   if (is_user_vaddr (addr)) // && addr >= STACK_LIMIT && addr >= esp - 32)
     {
       //printf ("fake fault. %s:%d ,ADDR: %p, UPPER: %p, LOWER: %p , STACK: %p\n", __FILE__, __LINE__, addr, PHYS_BASE, STACK_LIMIT, esp - 32);
-      if (page_load (spt, addr, write))
+      if (page_load (spt, addr, write, esp))
         return true; // 成功解决了
     }
   //printf ("real fault. %s:%d ,ADDR: %p, UPPER: %p, LOWER: %p , STACK: %p\n", __FILE__, __LINE__, addr, PHYS_BASE, STACK_LIMIT, esp - 32);
