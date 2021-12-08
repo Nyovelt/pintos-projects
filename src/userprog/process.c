@@ -110,6 +110,8 @@ start_process (void *argv)
 
 #ifdef VM
   page_init (&thread_current ()->sup_page_table);
+  list_init (&thread_current ()->mmap_list); // 初始化mmap_list
+  &thread_current ()->next_mapid = 1;
 #endif
 
   success = load (file_name, &if_.eip, &if_.esp, argv); // load access to filename as well as args

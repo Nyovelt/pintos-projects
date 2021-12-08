@@ -5,7 +5,7 @@
 #include <list.h>
 #include <hash.h>
 #include <stdint.h>
-
+#include "lib/user/syscall.h"
 #include "threads/synch.h" // lock
 
 
@@ -140,9 +140,21 @@ struct thread
     /* Owned by vm/page.c. */
     struct hash sup_page_table; // 页表
     void *esp;                  // 临时的esp
+    struct list mmap_list;      // 保存这个进程所有的  memory map
+    mapid_t next_mapid;         // next map id
+
+    struct mmap_descriptor
+    {
+        struct list_elem elem;
+        mapid_t mapid;
+        struct file *file;
+        void *addr;
+        uint32_t file_size;
+    };
+
 #endif
     /* Owned by thread.c. */
-    unsigned magic;                     /* Detects stack overflow. */
+    unsigned magic; /* Detects stack overflow. */
   };
 
 /* If false (default), use round-robin scheduler.

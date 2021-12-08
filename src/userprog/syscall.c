@@ -16,6 +16,8 @@
 #include "filesys/filesys.h"
 #include "filesys/file.h"
 #include "userprog/process.h"
+#include "vm/page.h"
+#include "vm/frame.h"
 
 typedef int pid_t;
 #define STDIN 0
@@ -38,7 +40,7 @@ static unsigned syscall_tell (int fd);
 static pid_t syscall_exec (const char *cmd_line);
 static int syscall_wait (pid_t pid);
 mapid_t mmap (int fd, void *addr);
-static void syscall_mmap (int fd, const void *addr);
+static mapid_t syscall_mmap (int fd, const void *addr);
 static void syscall_munmap (mapid_t mapid);
 void
 syscall_init (void)
@@ -179,7 +181,8 @@ syscall_handler (struct intr_frame *f UNUSED)
       is_valid_ptr (f->esp, 2);
       printf ("SYSCALL MMAP\n");
       break;
-      syscall_mmap (*((int *) f->esp + 1), *((void **) f->esp + 2)); //FIXME:
+      f->eax = syscall_mmap (*((int *) f->esp + 1),
+                             *((void **) f->esp + 2)); //FIXME:
     case SYS_MUNMAP:
       is_valid_ptr (f->esp, 1);
       printf ("SYSCALL MUNMAP\n");
@@ -391,17 +394,121 @@ syscall_wait (pid_t pid)
   return process_wait (pid);
 }
 
+static mapid_t
+syscall_mmap (int fd, const void *addr)
+{
+  lock_acquire (&file_lock);
+  if (fd == 0 || fd == 1) // fd cannot be 0 or 1, fail
+    {
+      lock_release (&file_lock);
+      return -1;
+    }
+  struct file_descriptor *f
+      = get_file_descriptor (fd); //  get file structer by fd
+  if (file_length (f->file) == 0)
+    {
+      lock_release (&file_lock);
+      return -1; // file length is 0, fail
+    }
+  if (addr == 0 || addr == NULL)
+    {
+      lock_release (&file_lock);
+      return -1; // addr is 0 , fail
+    }
+  if (addr != pg_round_down (addr))
+    {
+      lock_release (&file_lock);
+      return -1; // addr is not page aligned, fail
+    }
+  // whether the addr is overlapping with exsiting file map
+  for (int i = 0; i < file_length (f->file); i += PGSIZE)
+    {
+      if (page_lookup (thread_current ()->pagedir, addr + i) != NULL)
+        {
+          lock_release (&file_lock);
+          return -1;
+        }
+    }
+
+
+  // 对于一个文件，创建 n 个补充页表，直到把这个文件装下为止, i是 offset
+  for (int i = 0; i < file_length (f->file); i += PGSIZE)
+    {
+
+      struct sup_page_table_entry *spte
+          = malloc (sizeof (struct sup_page_table_entry)); // 创建一个页表
+
+      if (spte == NULL)
+        return -1;                                   // 创建失败，返回 -1
+      void *frame = frame_get_page (PAL_USER, spte); // 获取一个空闲页面
+
+      // 插，进程补充页表，frame，file，offset = i， 大小为 pagesize 或者 size % pagesize， 可读可写
+      if (!page_record (&thread_current ()->sup_page_table, frame, true,
+                        f->file, i,
+                        file_length (f->file) % PGSIZE == 0
+                            ? PGSIZE
+                            : file_length (f->file) % PGSIZE))
+        {
+          lock_release (&file_lock);
+          return -1;
+        }
+    }
+  struct mmap_descriptor *_mmap_descriptor
+      = malloc (sizeof (struct mmap_descriptor));
+  _mmap_descriptor->mapid = thread_current ()->next_mapid++;
+  _mmap_descriptor->file = f->file;
+  _mmap_descriptor->addr = pg_round_down (addr);
+  _mmap_descriptor->file_size = file_length (f->file);
+  list_push_back (&thread_current ()->mmap_list, &_mmap_descriptor->elem);
+  lock_release (&file_lock);
+  return _mmap_descriptor->mapid; //成功！返回 mapid
+}
 
 static void
 syscall_munmap (mapid_t mapid)
 {
+  lock_acquire (&file_lock);
+  struct mmap_descriptor *_mmap_descriptor = get_mmap_descriptor (mapid);
+  if (_mmap_descriptor == NULL)
+    {
+      lock_release (&file_lock);
+      return;
+    }
+  for (int i = _mmap_descriptor->addr;
+       i < _mmap_descriptor->addr + _mmap_descriptor->file_size; i += PGSIZE)
+    {
+      struct sup_page_table_entry *spte
+          = page_lookup (&thread_current ()->sup_page_table, i);
+      if (spte == NULL)
+        {
+          lock_release (&file_lock);
+          return;
+        }
+      //TODO: consider
+      frame_free_page (spte->frame);
+      page_remove (&thread_current ()->sup_page_table, i);
+    }
+  //TODO: 是否需要占用这个文件 (reopen)
+  list_remove (&_mmap_descriptor->elem);
+  free (_mmap_descriptor);
 }
 
-mapid_t
-mmap (int fd, void *addr)
+static struct mmap_descriptor *
+get_mmap_descriptor (mapid_t id)
 {
-}
-static void
-muunmap (mapid_t mapping)
-{
+  struct list_elem *e;
+  struct mmap_descriptor *_mmap_descriptor;
+  if (list_begin (&thread_current ()->mmap_list) == NULL)
+    return NULL;
+
+  for (e = list_begin (&thread_current ()->mmap_list);
+       e != list_end (&thread_current ()->mmap_list); e = list_next (e))
+    {
+      _mmap_descriptor = list_entry (e, struct mmap_descriptor, elem);
+      if (_mmap_descriptor == NULL || _mmap_descriptor->mapid < 1)
+        return NULL;
+      if (_mmap_descriptor->mapid == id)
+        return _mmap_descriptor;
+    }
+  return NULL;
 }
