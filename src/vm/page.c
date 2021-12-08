@@ -97,7 +97,7 @@ page_load (struct hash *spt, const void *vaddr, bool write, void *esp)
 
       frame = frame_get (PAL_USER, spte); // 去抓一段空的物理地址给这个页表
       memset (frame, 0, PGSIZE);
-      //printf ("zeroed page, %s:%d\n, UPAGE: %p\n, ESP: %p", __FILE__, __LINE__, upage, esp);
+      //printf ("zeroed page, %s:%d, UPAGE: %p, ESP: %p\n", __FILE__, __LINE__, upage, esp);
       spte->writable = true;
       spte->is_stack = true;
     }
