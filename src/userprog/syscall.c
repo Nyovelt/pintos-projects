@@ -199,7 +199,7 @@ syscall_halt (void)
   shutdown_power_off ();
 }
 
-static void
+void
 syscall_exit (int status)
 {
   thread_current ()->exit_code = status;

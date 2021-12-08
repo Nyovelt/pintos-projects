@@ -162,6 +162,7 @@ page_fault (struct intr_frame *f)
   //printf("frame: %p, thread_current: %p, esp: %p\n", f->esp, thread_current ()->esp, esp);
   if (not_present && page_fault_handler (&thread_current ()->sup_page_table, fault_addr, write, esp))
     return;
+  exit(-1);
 #endif
   /* To implement virtual memory, delete the rest of the function
      body, and replace it with code that brings in the page to
