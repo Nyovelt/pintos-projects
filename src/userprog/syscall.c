@@ -37,7 +37,7 @@ static void syscall_seek (int fd, unsigned position);
 static unsigned syscall_tell (int fd);
 static pid_t syscall_exec (const char *cmd_line);
 static int syscall_wait (pid_t pid);
-static mapid_t mmap (int fd, void *addr);
+mapid_t mmap (int fd, void *addr);
 static void syscall_mmap (int fd, const void *addr);
 static void syscall_munmap (mapid_t mapid);
 void
@@ -390,22 +390,17 @@ syscall_wait (pid_t pid)
   return process_wait (pid);
 }
 
-static void
-syscall_mmap (int fd, const void *addr)
-{
-}
 
 static void
 syscall_munmap (mapid_t mapid)
 {
 }
 
-static mapid_t
+mapid_t
 mmap (int fd, void *addr)
 {
 }
-
-void
+static void
 muunmap (mapid_t mapping)
 {
 }
