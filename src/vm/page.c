@@ -54,9 +54,7 @@ bool
 page_record (struct hash *spt, const void *upage, bool writable, struct file *file, off_t ofs, uint32_t read_bytes, bool in_stack)
 {
   if (page_lookup (spt, upage) != NULL)
-    {
       return false; // already exist
-    }
 
   struct sup_page_table_entry *spte = malloc (sizeof (struct sup_page_table_entry));
   if (spte == NULL)
@@ -75,7 +73,7 @@ page_record (struct hash *spt, const void *upage, bool writable, struct file *fi
       return false; // fail in hash_insert
     }
 
-  //printf ("recorded. %s:%d ,ADDR: %p\n", __FILE__, __LINE__, upage);
+  //printf ("recorded. %s:%d ,ADDR: %p, WRITABLE: %d\n", __FILE__, __LINE__, upage, spte->writable);
   return true;
 }
 
@@ -109,7 +107,10 @@ page_load (struct hash *spt, const void *vaddr, bool write, void *esp)
           return false; // fail in frame_get
 
       if (write && !spte->writable)
-        return false;
+        {
+          //printf ("cannot write. %s:%d, UPAGE: %p\n", __FILE__, __LINE__, upage);
+          return false;
+        }
 
       if (spte->swapped)
         {
