@@ -202,7 +202,7 @@ syscall_halt (void)
   shutdown_power_off ();
 }
 
-void
+static void
 syscall_exit (int status)
 {
   thread_current ()->exit_code = status;
@@ -349,7 +349,7 @@ syscall_filesize (int fd)
   return size;
 }
 
-void
+static void
 syscall_seek (int fd, unsigned position)
 {
   lock_acquire (&file_lock);

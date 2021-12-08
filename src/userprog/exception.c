@@ -158,11 +158,10 @@ page_fault (struct intr_frame *f)
    /* If this is a user page fault, we need to check if it is a
        valid user page fault. */
   /* get stack pointer(user or kernel). */
-  void *esp = user ? f->esp : thread_current ()->esp;
+  void *esp = 1 ? f->esp : thread_current ()->esp;
   //printf("frame: %p, thread_current: %p, esp: %p\n", f->esp, thread_current ()->esp, esp);
   if (not_present && page_fault_handler (&thread_current ()->sup_page_table, fault_addr, write, esp))
     return;
-  exit(-1);
 #endif
   /* To implement virtual memory, delete the rest of the function
      body, and replace it with code that brings in the page to

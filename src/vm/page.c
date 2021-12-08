@@ -75,7 +75,7 @@ page_record (struct hash *spt, const void *upage, bool writable, struct file *fi
       return false; // fail in hash_insert
     }
 
-  //printf ("recorded. %s:%d ,ADDR: %p\n", __FILE__, __LINE__, upage);
+  printf ("recorded. %s:%d ,ADDR: %p\n", __FILE__, __LINE__, upage);
   return true;
 }
 
@@ -85,7 +85,7 @@ page_load (struct hash *spt, const void *vaddr, bool write, void *esp)
   void *upage = pg_round_down (vaddr);
   struct sup_page_table_entry *spte = page_lookup (spt, upage); // 在补充页表里找在不在
   void *frame = NULL;
-  //printf ("to load. %s:%d, UPAGE: %p\n", __FILE__, __LINE__, upage);
+  printf ("to load. %s:%d, UPAGE: %p\n", __FILE__, __LINE__, upage);
 
   if (spte == NULL) //|| (spte->present && spte->swapped) || )
     {
@@ -99,7 +99,7 @@ page_load (struct hash *spt, const void *vaddr, bool write, void *esp)
 
       frame = frame_get (PAL_USER, spte); // 去抓一段空的物理地址给这个页表
       memset (frame, 0, PGSIZE);
-      //printf ("zeroed page, %s:%d\n, UPAGE: %p\n, ESP: %p", __FILE__, __LINE__, upage, esp);
+      printf ("zeroed page, %s:%d\n, UPAGE: %p\n, ESP: %p", __FILE__, __LINE__, upage, esp);
       spte->writable = true;
       spte->is_stack = true;
     }
