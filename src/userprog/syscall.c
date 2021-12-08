@@ -443,17 +443,26 @@ syscall_mmap (int fd, const void *addr)
           = malloc (sizeof (struct sup_page_table_entry)); // 创建一个页表
 
       if (spte == NULL)
-        return -1;                                   // 创建失败，返回 -1
+        {
+          return -1;
+        }                                            // 创建失败，返回 -1
       void *frame = frame_get (PAL_USER, spte);      // 获取一个空闲页面
+      if (frame == NULL)
+        {
+          free (spte);
+          lock_release (&file_lock);
+          return -1;
+        }
 
       // 插，进程补充页表，frame，file，offset = i， 大小为 pagesize 或者 size % pagesize， 可读可写
-      if (!page_record (&thread_current ()->sup_page_table, frame, true,
-                        f->file, i,
+      if (!page_record (&thread_current ()->sup_page_table, addr, true, f->file,
+                        i,
                         file_length (f->file) % PGSIZE == 0
                             ? PGSIZE
                             : file_length (f->file) % PGSIZE,
                         false))
         {
+          printf ("%s:%d, mmap failed\n", __func__, __LINE__);
           lock_release (&file_lock);
           return -1;
         }
