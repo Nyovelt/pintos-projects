@@ -529,7 +529,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       size_t page_zero_bytes = PGSIZE - page_read_bytes;
 
 #ifdef VM
-      if (!page_record (&thread_current ()->sup_page_table, upage, writable, file, ofs, page_read_bytes))
+      if (!page_record (&thread_current ()->sup_page_table, upage, writable, file, ofs, page_read_bytes, false))
         {
           return false;
         }

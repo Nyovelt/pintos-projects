@@ -116,6 +116,7 @@ syscall_handler (struct intr_frame *f UNUSED)
   is_valid_ptr (f->esp, 0);
 #ifdef VM
   thread_current ()->esp = f->esp;
+  //printf ("syscall_handler: esp = %p\n", thread_current ()->esp);
 #endif
 
   switch (*(int *) f->esp)
