@@ -85,7 +85,7 @@ page_load (struct hash *spt, const void *vaddr, bool write)
   void *frame = NULL;
   //printf ("to load. %s:%d, UPAGE: %p\n", __FILE__, __LINE__, upage);
 
-  if (spte == NULL) //|| (spte->present && spte->swapped) || (write && !spte->writable)
+  if (spte == NULL) //|| (spte->present && spte->swapped) || )
     {
       // 找不到 -> 创建一个新的空页表
       spte = malloc (sizeof (struct sup_page_table_entry));
@@ -95,9 +95,13 @@ page_load (struct hash *spt, const void *vaddr, bool write)
       frame = frame_get (PAL_USER, spte); // 去抓一段空的物理地址给这个页表
       memset (frame, 0, PGSIZE);
       //printf ("zeroed page, %s:%d\n, UPAGE: %p\n, ESP: %p", __FILE__, __LINE__, upage, esp);
+      spte->writable = true;
     }
   else
     {
+      if (write && !spte->writable)
+        return false;
+
       if (spte->swapped)
         {
           // then it is swap
@@ -131,7 +135,6 @@ page_load (struct hash *spt, const void *vaddr, bool write)
 
   spte->frame = frame; // 把这个页填进去
   spte->vaddr = upage;
-  spte->writable = write;
   spte->swapped = false;
   return true;
 };
@@ -150,13 +153,11 @@ page_free (struct hash *spt, const void *vaddr)
 
 bool
 page_fault_handler (struct hash *spt, const void *addr, bool write, void *esp)
-
 {
-
   if (addr == NULL || is_kernel_vaddr (addr)) // 有错就真的错
     return false;
 
-  if (is_user_vaddr(addr)) // && addr >= STACK_LIMIT && addr >= esp - 32)
+  if (is_user_vaddr (addr)) // && addr >= STACK_LIMIT && addr >= esp - 32)
     {
       //printf ("fake fault. %s:%d ,ADDR: %p, UPPER: %p, LOWER: %p , STACK: %p\n", __FILE__, __LINE__, addr, PHYS_BASE, STACK_LIMIT, esp - 32);
       if (page_load (spt, addr, write))
