@@ -1,13 +1,17 @@
 #include <hash.h>
-#include "stdbool.h"
+#include <string.h>
+#include <stdio.h>
+#include <stdbool.h>
 #include "vm/page.h"
 #include "vm/frame.h"
 #include "threads/vaddr.h"
 #include "threads/thread.h"
 #include "threads/malloc.h"
 #include "userprog/process.h"
+#include "filesys/file.h"
 
-#define STACK_MAX_SIZE (0x800000) // 8 MB
+//#define STACK_MAX_SIZE (0x800000) // 8 MB
+#define STACK_LIMIT ((void *)PHYS_BASE - (0x800000))
 
 /* return a hash value of page e */
 static unsigned
@@ -34,7 +38,7 @@ page_init (struct hash *spt)
 
 /* return the page which has the address */
 static struct sup_page_table_entry *
-page_lookup (struct hash *spt ,const void *vaddr)
+page_lookup (struct hash *spt, const void *vaddr)
 {
   struct sup_page_table_entry spte;
   struct hash_elem *e;
@@ -76,46 +80,39 @@ page_record (struct hash *spt, void *upage, bool writable, struct file *file, of
   spte->swapped = false;
   spte->file = file;
   spte->file_ofs = ofs;
-  spte->file_end = read_bytes;
+  spte->file_size = read_bytes;
 
   if (hash_insert (spt, &spte->hash_elem) != NULL)
     {
       return false; // fail in hash_insert
     }
+
+  //printf ("recorded. %s:%d ,ADDR: %p\n", __FILE__, __LINE__, upage);
   return true;
 }
 
 bool
-page_load (struct hash *spt, void *user_vaddr, bool write, void *esp)
+page_load (struct hash *spt, void *vaddr, bool write, void *esp)
 {
-  printf ("%s:%d \n", __FILE__, __LINE__);
-  struct sup_page_table_entry *spte = page_lookup (spt, user_vaddr); // 在补充页表里找在不在
-  if (spte == NULL)                                                  //|| (spte->present && spte->swapped) || (write && !spte->writable)
+  void *upage = pg_round_down (vaddr);
+  struct sup_page_table_entry *spte = page_lookup (spt, upage); // 在补充页表里找在不在
+  void *frame = NULL;
+  //printf ("to load. %s:%d, UPAGE: %p\n", __FILE__, __LINE__, upage);
+
+  if (spte == NULL) //|| (spte->present && spte->swapped) || (write && !spte->writable)
     {
       // 找不到 -> 创建一个新的空页表
       spte = malloc (sizeof (struct sup_page_table_entry));
       if (spte == NULL)
-        return false; // fail in malloc
-
-      void *frame = frame_get (PAL_USER, spte); // 去抓一段空的物理地址给这个页表
-      if (frame == NULL)
-        return false;      // fail in frame_get
-      spte->frame = frame; // 把这个页填进去
-      spte->user_vaddr = user_vaddr;
-      spte->swapped = false;
-      if (!install_page (user_vaddr, frame, spte->writable))
-        return false; // fail in install_page
-      return true;
+        return false; // fail in malloc    // fail in frame_get
+      
+      frame = frame_get (PAL_USER, spte);                     // 去抓一段空的物理地址给这个页表
+      memset (frame, 0, PGSIZE);
+      spte->writable = true;
+      //printf ("zeroed page, %s:%d\n, UPAGE: %p\n, ESP: %p", __FILE__, __LINE__, upage, esp);
     }
   else
     {
-
-      void *frame = frame_get (PAL_USER, spte);
-      if (frame == NULL)
-        return false; // fail in frame_get
-                      // install page and frame
-      if (!install_page (user_vaddr, frame, spte->writable))
-        return false; // fail in install_page
       if (spte->swapped)
         {
           // then it is swap
@@ -125,13 +122,36 @@ page_load (struct hash *spt, void *user_vaddr, bool write, void *esp)
           // 打开文件
           if (spte->file == NULL)
             return false; // fail in check file
-          if (file_read_at (spte->file, frame, spte->file_end, spte->file_ofs) == 0)
-            return false;
+          //printf ("read file, %s:%d\n", __FILE__, __LINE__);
+          frame = frame_get (PAL_USER, spte);                     // 去抓一段空的物理地址给这个页表
+
+          if (file_read_at (spte->file, frame, spte->file_size, spte->file_ofs) != (off_t) spte->file_size)
+            {
+              frame_free (frame);
+              return false; // fail in file_read_at
+            }
+          memset (frame + spte->file_size, 0, PGSIZE - spte->file_size);
         }
-      spte->frame = frame;
+      spte->writable = true;
+      //printf ("read file, %s:%d\n", __FILE__, __LINE__);
     }
+
+  if (frame == NULL)
+    return false;
+
+  if (!install_page (upage, frame, spte->writable))
+    {
+      frame_free (frame);
+      return false; // fail in install_page
+    }
+
+  spte->frame = frame; // 把这个页填进去
+  spte->user_vaddr = upage;
+  spte->present = true;
+  spte->swapped = false;
+  return true;
 };
-                       
+
 void
 page_free (struct hash *spt, void *user_vaddr)
 {
@@ -152,12 +172,12 @@ page_fault_handler (struct hash *spt, const void *addr, bool write, void *esp)
   if (addr == NULL || is_kernel_vaddr (addr)) // 有错就真的错
     return false;
 
-  if (addr < PHYS_BASE && addr >= PHYS_BASE - STACK_MAX_SIZE && addr >= esp - 32)
+  if (addr < PHYS_BASE)// && addr >= STACK_LIMIT && addr >= esp - 32)
     {
-      printf ("%s:%d ,ADDR: %ud, PHYS_BASE: %ud \n", __FILE__, __LINE__, addr, PHYS_BASE);
+      //printf ("fake fault. %s:%d ,ADDR: %p, UPPER: %p, LOWER: %p , STACK: %p\n", __FILE__, __LINE__, addr, PHYS_BASE, STACK_LIMIT, esp - 32);
       if (page_load (spt, addr, write, esp))
         return true; // 成功解决了
     }
-  printf ("%s:%d ,ADDR: %u, PHYS_BASE: %u, ESP: %u , RD: %u\n", __FILE__, __LINE__, addr, PHYS_BASE, esp, pg_round_down (addr));
+  //printf ("real fault. %s:%d ,ADDR: %p, UPPER: %p, LOWER: %p , STACK: %p\n", __FILE__, __LINE__, addr, PHYS_BASE, STACK_LIMIT, esp - 32);
   return false; // 真的错了
 }

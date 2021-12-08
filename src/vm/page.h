@@ -21,7 +21,7 @@ struct sup_page_table_entry
     /* For fole operations */
     struct file *file;
     off_t file_ofs;
-    uint32_t file_end;
+    uint32_t file_size;
 };
 
 #endif /* vm/page.h */
