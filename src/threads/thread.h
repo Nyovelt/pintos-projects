@@ -116,6 +116,7 @@ struct thread
       struct file *file;
       int fd;
       struct list_elem elem;
+      int mmaped;
     } file_descriptor_;               // record the list of opened files
 
     /* begin exec */
@@ -150,6 +151,7 @@ struct thread
         struct file *file;
         void *addr;
         uint32_t file_size;
+        struct file_descriptor *fd;
     };
 
 #endif

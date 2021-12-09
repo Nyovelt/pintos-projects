@@ -327,11 +327,20 @@ syscall_close (int fd)
         }
       if (f->fd == fd)
         {
-          list_remove (e);
-          file_close (f->file);
-          free (f);
-          lock_release (&file_lock);
-          return 0;
+          if (f->mmaped > 0)
+            {
+              f->mmaped += 1;
+              lock_release (&file_lock);
+              return 0;
+            }
+          else
+            {
+              list_remove (e);
+              file_close (f->file);
+              free (f);
+              lock_release (&file_lock);
+              return 0;
+            }
         }
     }
   lock_release (&file_lock);
@@ -503,10 +512,12 @@ syscall_mmap (int fd, const void *addr)
   struct mmap_descriptor *_mmap_descriptor
       = malloc (sizeof (struct mmap_descriptor));
   _mmap_descriptor->mapid = thread_current ()->next_mapid++;
+  _mmap_descriptor->fd = f;
   _mmap_descriptor->file = f->file;
   _mmap_descriptor->addr = pg_round_down (addr);
   _mmap_descriptor->file_size = file_length (f->file);
   list_push_back (&thread_current ()->mmap_list, &_mmap_descriptor->elem);
+  f->mmaped = 1;
   lock_release (&file_lock);
   return _mmap_descriptor->mapid; //成功！返回 mapid
 }
@@ -535,13 +546,26 @@ syscall_munmap (mapid_t mapid)
           lock_release (&file_lock);
           return;
         }
+      file_write_at (_mmap_descriptor->file, spte->frame,
+                     ((i - (int) (_mmap_descriptor->addr)) % PGSIZE == 0)
+                         ? PGSIZE
+                         : (i - (int) (_mmap_descriptor->addr)),
+                     (i - (int) (_mmap_descriptor->addr)));
       //TODO: consider
       // frame_free (spte->frame); //FIXME: cannot work
       page_free (&thread_current ()->sup_page_table, i);
     }
-
+  if (_mmap_descriptor->fd->mmaped > 1)
+    {
+      _mmap_descriptor->fd->mmaped = 0;
+      lock_release (&file_lock);
+      syscall_close (_mmap_descriptor->fd);
+      lock_acquire (&file_lock);
+    }
   list_remove (&_mmap_descriptor->elem);
   free (_mmap_descriptor);
+
+
   lock_release (&file_lock);
 }
 
