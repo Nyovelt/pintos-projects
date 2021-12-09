@@ -424,6 +424,8 @@ syscall_mmap (int fd, const void *addr)
       return -1; // addr is not page aligned, fail
     }
 
+  file_reopen (f->file); // reopen file
+
   // whether the addr is overlapping with exsiting file map
   for (int i = 0; i < file_length (f->file); i += PGSIZE)
     {
@@ -462,7 +464,7 @@ syscall_mmap (int fd, const void *addr)
                             : file_length (f->file) % PGSIZE,
                         false))
         {
-          printf ("%s:%d, mmap failed\n", __func__, __LINE__);
+          //printf ("%s:%d, mmap failed\n", __func__, __LINE__);
           lock_release (&file_lock);
           return -1;
         }
