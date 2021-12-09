@@ -8,7 +8,7 @@ BraceWrapping:
   BeforeElse: true
   IndentBraces: true
 BreakBeforeBraces: Custom
-ColumnLimit: 80
+ColumnLimit: 0
 Cpp11BracedListStyle: true
 IndentAccessModifiers: true
 IndentCaseBlocks: true
