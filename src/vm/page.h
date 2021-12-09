@@ -31,3 +31,5 @@ bool page_load (struct hash *spt, const void *vaddr, bool write, void *esp);
 struct sup_page_table_entry *page_lookup (struct hash *spt, const void *addr);
 void page_free (struct hash *spt, const void *vaddr);
 bool page_fault_handler (struct hash *spt, const void *addr, bool write, void *esp);
+void
+page_print (struct hash *spt);

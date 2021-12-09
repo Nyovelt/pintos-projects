@@ -514,7 +514,7 @@ syscall_mmap (int fd, const void *addr)
 static void
 syscall_munmap (mapid_t mapid)
 {
-  return;
+  //return;
   lock_acquire (&file_lock);
   struct mmap_descriptor *_mmap_descriptor = get_mmap_descriptor (mapid);
   if (_mmap_descriptor == NULL)
@@ -522,39 +522,40 @@ syscall_munmap (mapid_t mapid)
       lock_release (&file_lock);
       return;
     }
+  file_reopen (_mmap_descriptor->file);
+  //page_print (&thread_current ()->sup_page_table);
   for (int i = _mmap_descriptor->addr;
        i < _mmap_descriptor->addr + _mmap_descriptor->file_size; i += PGSIZE)
     {
       struct sup_page_table_entry *spte
           = page_lookup (&thread_current ()->sup_page_table, i);
+
       if (spte == NULL)
         {
           lock_release (&file_lock);
           return;
         }
       //TODO: consider
-      frame_free (spte->frame);
+      // frame_free (spte->frame); //FIXME: cannot work
       page_free (&thread_current ()->sup_page_table, i);
     }
-  //TODO: 是否需要占用这个文件 (reopen)
+
   list_remove (&_mmap_descriptor->elem);
   free (_mmap_descriptor);
+  lock_release (&file_lock);
 }
 
 static struct mmap_descriptor *
 get_mmap_descriptor (mapid_t id)
 {
-  struct list_elem *e;
   struct mmap_descriptor *_mmap_descriptor;
   if (list_begin (&thread_current ()->mmap_list) == NULL)
     return NULL;
 
-  for (e = list_begin (&thread_current ()->mmap_list);
+  for (struct list_elem *e = list_begin (&thread_current ()->mmap_list);
        e != list_end (&thread_current ()->mmap_list); e = list_next (e))
     {
       _mmap_descriptor = list_entry (e, struct mmap_descriptor, elem);
-      if (_mmap_descriptor == NULL || _mmap_descriptor->mapid < 1)
-        return NULL;
       if (_mmap_descriptor->mapid == id)
         return _mmap_descriptor;
     }
