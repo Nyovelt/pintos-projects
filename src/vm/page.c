@@ -89,7 +89,7 @@ page_load (struct hash *spt, const void *vaddr, bool write, void *esp)
 {
   void *upage = pg_round_down (vaddr);
   struct sup_page_table_entry *spte = page_lookup (spt, upage); // 在补充页表里找在不在
-  void *frame = NULL;
+  void *frame = frame_get (PAL_USER, spte);;
 
   if (spte == NULL) //|| (spte->present && spte->swapped) || )
     {
@@ -102,7 +102,6 @@ page_load (struct hash *spt, const void *vaddr, bool write, void *esp)
       if (spte == NULL)
         return false; // fail in malloc    // fail in frame_get
 
-      frame = frame_get (PAL_USER, spte); // 去抓一段空的物理地址给这个页表
       memset (frame, 0, PGSIZE);
 
       spte->vaddr = upage;
@@ -135,7 +134,6 @@ page_load (struct hash *spt, const void *vaddr, bool write, void *esp)
           // 打开文件
           if (spte->file == NULL)
             return false; // fail in check file
-          frame = frame_get (PAL_USER, spte); // 去抓一段空的物理地址给这个页表
 
           if (file_read_at (spte->file, frame, spte->file_size, spte->file_ofs) != (off_t) spte->file_size)
             {
