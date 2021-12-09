@@ -64,12 +64,14 @@ is_valid_addr (const void *addr, bool write)
   else
     {
       //printf("existing page: %p\n", addr);
-      struct sup_page_table_entry *spte
-          = page_lookup (&thread_current ()->sup_page_table, addr);
-      if (spte != NULL)
-        return !(!spte->writable && write);
-      else
-        return true;
+      if (write)
+        {
+          struct sup_page_table_entry *spte
+              = page_lookup (&thread_current ()->sup_page_table, addr);
+          if (spte != NULL)
+            return spte->writable;
+        }
+      return true;
     }
 #else
   return is_user_vaddr (addr)
@@ -532,6 +534,7 @@ syscall_mmap (int fd, const void *addr)
       ASSERT (pg_ofs (addr + i) == 0);
       spte->vaddr = addr + i;
       spte->writable = true;
+      spte->swap_id = -1;
       spte->file = f->file;
       spte->file_ofs = i;
       spte->file_size = file_length (f->file) % PGSIZE == 0
