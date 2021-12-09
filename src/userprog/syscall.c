@@ -440,12 +440,15 @@ syscall_wait (pid_t pid)
 static mapid_t
 syscall_mmap (int fd, const void *addr)
 {
+
   lock_acquire (&file_lock);
+
   if (fd == 0 || fd == 1) // fd cannot be 0 or 1, fail
     {
       lock_release (&file_lock);
       return -1;
     }
+
   struct file_descriptor *f
       = get_file_descriptor (fd); //  get file structer by fd
   if (file_length (f->file) == 0)
@@ -471,11 +474,11 @@ syscall_mmap (int fd, const void *addr)
     {
       if (page_lookup (&thread_current ()->sup_page_table, addr + i) != NULL)
         {
+
           lock_release (&file_lock);
           return -1;
         }
     }
-
 
   // 对于一个文件，创建 n 个补充页表，直到把这个文件装下为止, i是 offset
   for (int i = 0; i < file_length (f->file); i += PGSIZE)
@@ -486,11 +489,14 @@ syscall_mmap (int fd, const void *addr)
 
       if (spte == NULL)
         {
+
+          lock_release (&file_lock);
           return -1;
         }                                            // 创建失败，返回 -1
       void *frame = frame_get (PAL_USER, spte);      // 获取一个空闲页面
       if (frame == NULL)
         {
+
           free (spte);
           lock_release (&file_lock);
           return -1;
@@ -508,8 +514,8 @@ syscall_mmap (int fd, const void *addr)
       //     lock_release (&file_lock);
       //     return -1;
       //   }
-      ASSERT (pg_ofs (addr) == 0);
-      spte->vaddr = addr;
+      ASSERT (pg_ofs (addr + i) == 0);
+      spte->vaddr = addr + i;
       spte->writable = true;
       spte->file = f->file;
       spte->file_ofs = i;
