@@ -49,48 +49,77 @@ syscall_init (void)
   intr_register_int (0x30, 3, INTR_ON, syscall_handler, "syscall");
 }
 
-static inline bool
-is_valid_addr (const void *addr)
+static bool
+is_valid_addr (const void *addr, bool write)
 {
+#ifdef VM
+  if (!is_user_vaddr (addr))
+    return false;
+
+  if (pagedir_get_page (thread_current ()->pagedir, addr) == NULL)
+    {
+      //printf("page fault for read\n");
+      return page_fault_handler(&thread_current()->sup_page_table, addr, write, thread_current()->esp);
+    }
+  else
+    {
+      //printf("existing page: %p\n", addr);
+      struct sup_page_table_entry *spte = page_lookup(&thread_current()->sup_page_table, addr);
+      if (spte != NULL)
+        return !(!spte->writable && write);
+      else
+        return true;
+    }
+#else
   return is_user_vaddr (addr) && pagedir_get_page (thread_current ()->pagedir, addr);
+#endif
 }
 
-static inline void
-is_valid_ptr (const void *esp, const int offset)
+static void
+is_valid_ptr (const void *esp, const int offset, bool write)
 {
+  //printf("is_valid_ptr: %p\n", esp + offset);
   const void *ptr = esp + offset * sizeof (void *);
   /* Check the first and last bytes */
-  if (!is_valid_addr (ptr) || !is_valid_addr (ptr + sizeof (void *) - 1))
+  if (!is_valid_addr (ptr, write) || !is_valid_addr (ptr + sizeof (void *) - 1, write))
     syscall_exit (-1);
+  //printf("valid ptr\n");
 }
 
 /* Check the head, tail and pages */
 static void
-check_memory (const void *begin_addr, const int size)
+check_memory (const void *begin_addr, const int size, bool write)
 {
+  //printf("check memory, size: %d\n", size);
+  //printf("check end: %p\n", begin_addr + sizeof (void *) - 1);
+  if (!is_valid_addr (begin_addr + size - 1, write))
+    syscall_exit (-1);
+
   /* Check the entire memory slice accessed through this pointer */
   for (const void *ptr = begin_addr; ptr < begin_addr + size; ptr += PGSIZE)
     {
-      if (!is_valid_addr (ptr))
+      //printf("check: %p\n", ptr);
+      if (!is_valid_addr (ptr, write))
         syscall_exit (-1);
+      //printf("valid: %p\n", ptr);
     }
-
-  if (!is_valid_addr (begin_addr + sizeof (void *) - 1))
-    syscall_exit (-1);
+  //printf("check memory success\n");
 }
 
 static void
 check_string (const char *str)
 {
-  if (!is_valid_addr (str))
+  //printf("check string: %s\n", str);
+  if (!is_valid_addr (str, false))
     syscall_exit (-1);
 
   for (const char *c = str; *c != '\0';)
     {
       c++; // avoid deferencing invalid address
-      if (c - str + 2 == PGSIZE || !is_valid_addr (c))
+      if (c - str + 2 == PGSIZE || !is_valid_addr (c, false))
         syscall_exit (-1);
     }
+  //printf("string success\n");
 }
 
 static struct file_descriptor *
@@ -114,7 +143,7 @@ static void
 syscall_handler (struct intr_frame *f UNUSED)
 {
   /* First check if f->esp is a valid pointer */
-  is_valid_ptr (f->esp, 0);
+  is_valid_ptr (f->esp, 0, false);
 #ifdef VM
   thread_current ()->esp = f->esp;
   //printf ("syscall_handler: esp = %p\n", thread_current ()->esp);
@@ -126,67 +155,69 @@ syscall_handler (struct intr_frame *f UNUSED)
       syscall_halt ();
       break;
     case SYS_EXIT:
-      is_valid_ptr (f->esp, 1);
+      is_valid_ptr (f->esp, 1, false);
       syscall_exit (*((int *) f->esp + 1));
       break;
     case SYS_EXEC:
-      is_valid_ptr (f->esp, 1);
+      is_valid_ptr (f->esp, 1, false);
       f->eax = syscall_exec (*((char **) f->esp + 1));
       break;
     case SYS_WAIT:
-      is_valid_ptr (f->esp, 1);
+      is_valid_ptr (f->esp, 1, false);
       f->eax = syscall_wait (*((pid_t *) f->esp + 1));
       break;
     case SYS_CREATE:
-      is_valid_ptr (f->esp, 2);
+      is_valid_ptr (f->esp, 2, false);
       check_string (*((const char **) f->esp + 1));
       f->eax = syscall_create (*((const char **) f->esp + 1), *((unsigned *) f->esp + 2));
       break;
     case SYS_REMOVE:
-      is_valid_ptr (f->esp, 1);
+      is_valid_ptr (f->esp, 1, false);
       check_string (*((const char **) f->esp + 1));
       f->eax = syscall_remove (*((const char **) f->esp + 1));
       break;
     case SYS_OPEN:
-      is_valid_ptr (f->esp, 1);
+      //printf("begin open\n");
+      is_valid_ptr (f->esp, 1, false);
       f->eax = syscall_open (*((char **) f->esp + 1));
       break;
     case SYS_FILESIZE:
-      is_valid_ptr (f->esp, 1);
+      is_valid_ptr (f->esp, 1, false);
       f->eax = syscall_filesize (*((int *) f->esp + 1));
       break;
     case SYS_READ:
-      is_valid_ptr (f->esp, 3);
-      check_memory (*((void **) f->esp + 2), *((unsigned *) f->esp + 3));
+      //printf("begin read\n");
+      is_valid_ptr (f->esp, 3, false);
+      check_memory (*((void **) f->esp + 2), *((unsigned *) f->esp + 3), true);
       f->eax = syscall_read (*((int *) f->esp + 1), (void *) (*((int *) f->esp + 2)), *((unsigned *) f->esp + 3));
       break;
     case SYS_WRITE:
-      is_valid_ptr (f->esp, 3);
-      check_memory (*((void **) f->esp + 2), *((unsigned *) f->esp + 3));
+      is_valid_ptr (f->esp, 3, false);
+      check_memory (*((void **) f->esp + 2), *((unsigned *) f->esp + 3), false);
       f->eax = syscall_write (*((int *) f->esp + 1), (*((void **) f->esp + 2)), *((unsigned *) f->esp + 3));
       break;
     case SYS_SEEK:
-      is_valid_ptr (f->esp, 2);
+      is_valid_ptr (f->esp, 2, false);
       syscall_seek (*((int *) f->esp + 1), *((unsigned *) f->esp + 2));
       break;
     case SYS_TELL:
-      is_valid_ptr (f->esp, 1);
+      is_valid_ptr (f->esp, 1, false);
       f->eax = syscall_tell (*((int *) f->esp + 1));
       break;
     case SYS_CLOSE:
-      is_valid_ptr (f->esp, 1);
+      is_valid_ptr (f->esp, 1, false);
       f->eax = syscall_close (*((int *) f->esp + 1));
       break;
     /* Prriject 3 */
     case SYS_MMAP:
-      is_valid_ptr (f->esp, 2);
+      is_valid_ptr (f->esp, 2, false);
       //printf ("SYSCALL MMAP\n");
 
       f->eax = syscall_mmap (*((int *) f->esp + 1),
                              *((void **) f->esp + 2)); //FIXME:
       break;
     case SYS_MUNMAP:
-      is_valid_ptr (f->esp, 1);
+      is_valid_ptr (f->esp, 1, false);
       //printf ("SYSCALL MUNMAP\n");
 
       syscall_munmap (*((int *) f->esp + 1)); //FIXME:
@@ -462,7 +493,7 @@ syscall_mmap (int fd, const void *addr)
                             : file_length (f->file) % PGSIZE,
                         false))
         {
-          printf ("%s:%d, mmap failed\n", __func__, __LINE__);
+          //printf ("%s:%d, mmap failed\n", __func__, __LINE__);
           lock_release (&file_lock);
           return -1;
         }
