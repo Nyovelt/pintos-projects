@@ -497,16 +497,33 @@ syscall_mmap (int fd, const void *addr)
         }
 
       // 插，进程补充页表，frame，file，offset = i， 大小为 pagesize 或者 size % pagesize， 可读可写
-      if (!page_record (&thread_current ()->sup_page_table, addr, true, f->file,
-                        i,
-                        file_length (f->file) % PGSIZE == 0
+      // if (!page_record (&thread_current ()->sup_page_table, addr, true, f->file,
+      //                   i,
+      //                   file_length (f->file) % PGSIZE == 0
+      //                       ? PGSIZE
+      //                       : file_length (f->file) % PGSIZE,
+      //                   false))
+      //   {
+      //     printf ("%s:%d, mmap failed\n", __func__, __LINE__);
+      //     lock_release (&file_lock);
+      //     return -1;
+      //   }
+      ASSERT (pg_ofs (addr) == 0);
+      spte->vaddr = addr;
+      spte->writable = true;
+      spte->file = f->file;
+      spte->file_ofs = i;
+      spte->file_size = file_length (f->file) % PGSIZE == 0
                             ? PGSIZE
-                            : file_length (f->file) % PGSIZE,
-                        false))
+                            : file_length (f->file) % PGSIZE;
+      spte->is_stack = false;
+      if (!spte->frame)
+        spte->frame = frame;
+      if (hash_insert (&thread_current ()->sup_page_table, &spte->hash_elem)
+          != NULL)
         {
-          //printf ("%s:%d, mmap failed\n", __func__, __LINE__);
-          lock_release (&file_lock);
-          return -1;
+          free (spte);
+          return -1; // fail in hash_insert
         }
     }
   struct mmap_descriptor *_mmap_descriptor
@@ -525,6 +542,7 @@ syscall_mmap (int fd, const void *addr)
 static void
 syscall_munmap (mapid_t mapid)
 {
+
   //return;
   lock_acquire (&file_lock);
   struct mmap_descriptor *_mmap_descriptor = get_mmap_descriptor (mapid);
@@ -534,7 +552,7 @@ syscall_munmap (mapid_t mapid)
       return;
     }
   file_reopen (_mmap_descriptor->file);
-  //page_print (&thread_current ()->sup_page_table);
+  // page_print (&thread_current ()->sup_page_table);
   for (int i = _mmap_descriptor->addr;
        i < _mmap_descriptor->addr + _mmap_descriptor->file_size; i += PGSIZE)
     {
@@ -543,17 +561,21 @@ syscall_munmap (mapid_t mapid)
 
       if (spte == NULL)
         {
+  
           lock_release (&file_lock);
           return;
         }
+     
       file_write_at (_mmap_descriptor->file, spte->frame,
                      ((i - (int) (_mmap_descriptor->addr)) % PGSIZE == 0)
                          ? PGSIZE
                          : (i - (int) (_mmap_descriptor->addr)),
                      (i - (int) (_mmap_descriptor->addr)));
+   
       //TODO: consider
       // frame_free (spte->frame); //FIXME: cannot work
       page_free (&thread_current ()->sup_page_table, i);
+    
     }
   if (_mmap_descriptor->fd->mmaped > 1)
     {
