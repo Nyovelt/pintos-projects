@@ -222,9 +222,7 @@ thread_block (void)
   ASSERT (intr_get_level () == INTR_OFF);
 
   thread_current ()->status = THREAD_BLOCKED;
-  //printf ("%s:%d thread %p\n", __FILE__, __LINE__, thread_current ());
   schedule ();
-  //printf ("%s:%d thread %p\n", __FILE__, __LINE__, thread_current ());
 }
 
 /* Transitions a blocked thread T to the ready-to-run state.
