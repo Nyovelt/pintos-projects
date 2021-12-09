@@ -79,6 +79,11 @@ page_record (struct hash *spt, const void *upage, bool writable, struct file *fi
   return true;
 }
 
+int
+checksum (void *frame)
+{
+}
+
 bool
 page_load (struct hash *spt, const void *vaddr, bool write, void *esp)
 {
@@ -137,6 +142,7 @@ page_load (struct hash *spt, const void *vaddr, bool write, void *esp)
               frame_free (frame);
               return false; // fail in file_read_at
             }
+
           memset (frame + spte->file_size, 0, PGSIZE - spte->file_size);
         }
     }
@@ -188,7 +194,8 @@ page_print (struct hash *spt)
     {
       struct sup_page_table_entry *spte = hash_entry (hash_cur (&i), struct sup_page_table_entry, hash_elem);
       printf ("================================\n");
-      printf ("vaddr begin: %p, is file: %d ", spte->vaddr, spte->file ? 1 : 0);
+      printf ("vaddr : %p, is file: %d is stack: %d ", spte->vaddr,
+              spte->file ? 1 : 0, spte->is_stack ? 1 : 0);
       if (spte->file)
         {
           printf ("size: %d, offset: %d ", spte->file_size, spte->file_ofs);

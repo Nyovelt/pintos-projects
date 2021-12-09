@@ -21,6 +21,8 @@ struct sup_page_table_entry
     struct file *file;
     off_t file_ofs;
     uint32_t file_size;
+
+    unsigned hash;
 };
 
 #endif /* vm/page.h */

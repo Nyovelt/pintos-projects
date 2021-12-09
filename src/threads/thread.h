@@ -152,6 +152,8 @@ struct thread
         void *addr;
         uint32_t file_size;
         struct file_descriptor *fd;
+        bool dead;
+        int hack;
     };
 
 #endif

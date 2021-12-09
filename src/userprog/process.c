@@ -205,6 +205,7 @@ process_exit (void)
 
   // 在 exit 之前把所有 mmap_list 里的文件都写回去
   lock_acquire (&file_lock);
+
   struct mmap_descriptor *_mmap_descriptor;
   for (struct list_elem *e = list_begin (&thread_current ()->mmap_list);
        e != list_end (&thread_current ()->mmap_list); e = list_next (e))
@@ -222,11 +223,26 @@ process_exit (void)
               lock_release (&file_lock);
               break;
             }
-          file_write_at (_mmap_descriptor->file, spte->frame,
-                         ((i - (int) (_mmap_descriptor->addr)) % PGSIZE == 0)
-                             ? PGSIZE
-                             : (i - (int) (_mmap_descriptor->addr)),
-                         (i - (int) (_mmap_descriptor->addr)));
+          int NoWrite = 0;
+
+          if (spte->hash == 0)
+            {
+            }
+          else
+            {
+              unsigned hash = hash_bytes (spte->frame, spte->file_size);
+              //printf ("%s:%d,hash: %u\n", __FILE__, __LINE__, hash);
+              if (hash == spte->hash)
+                NoWrite = 1;
+            }
+
+
+          if (NoWrite == 0)
+            file_write_at (_mmap_descriptor->file, spte->frame,
+                           ((i - (int) (_mmap_descriptor->addr)) % PGSIZE == 0)
+                               ? PGSIZE
+                               : (i - (int) (_mmap_descriptor->addr)),
+                           (i - (int) (_mmap_descriptor->addr)));
           //TODO: consider
           // frame_free (spte->frame); //FIXME: cannot work
           //page_free (&thread_current ()->sup_page_table, i);
@@ -597,6 +613,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage, uint32_t read_bytes,
       zero_bytes -= page_zero_bytes;
       upage += PGSIZE;
     }
+  //page_print (&thread_current ()->sup_page_table);
   return true;
 }
 
