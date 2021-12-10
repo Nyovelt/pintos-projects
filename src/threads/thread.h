@@ -30,7 +30,9 @@ typedef int tid_t;
 #define PRI_MAX 63                      /* Highest priority. */
 
 /* Lock manipulate files across threads */
-struct lock file_lock;
+#ifdef USERPROG
+struct lock filesys_lock;
+#endif
 
 /* A kernel thread or user process.
 
@@ -154,7 +156,7 @@ struct thread
         struct file_descriptor *fd;
         bool dead;
         int hack;
-    };
+    } mmap_descriptor;
 
 #endif
     /* Owned by thread.c. */

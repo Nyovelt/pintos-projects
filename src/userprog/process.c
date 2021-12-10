@@ -47,7 +47,7 @@ process_execute (const char *file_name)
   if (fn_copy == NULL)
     return TID_ERROR;
 
-  lock_acquire (&file_lock);
+  lock_acquire (&filesys_lock);
   strlcpy (fn_copy, file_name, PGSIZE);
 
   /* Parse the ﬁlename deliminating by white spaces */
@@ -70,7 +70,7 @@ process_execute (const char *file_name)
       struct thread *chd = get_thread_by_tid (tid);
       if (chd == NULL) // 如果进程不存在
         {
-          lock_release (&file_lock);
+          lock_release (&filesys_lock);
           return -1;
         }
       sema_down (&(chd->sema_load)); // 等待进程加载完成
@@ -80,14 +80,14 @@ process_execute (const char *file_name)
         {
           // 失败
           sema_up (&(chd->child_sema_load));
-          lock_release (&file_lock);
+          lock_release (&filesys_lock);
           return -1;
         }
       chd->parent = t; // I am your father, prepare to die.
       list_push_back (&thread_current ()->child_list, &chd->child_elem);
       sema_up (&(chd->child_sema_load));
     }
-  lock_release (&file_lock);
+  lock_release (&filesys_lock);
   return tid;
 }
 
@@ -194,17 +194,17 @@ process_exit (void)
   sema_up (&cur->sema_wait);
   cur->load_status = FINISHED;
   uint32_t *pd;
-  lock_acquire (&file_lock);
+  lock_acquire (&filesys_lock);
 
 
   if (cur->self != NULL)
     file_close (cur->self);
   //FIXME: write back
 
-  lock_release (&file_lock);
+  lock_release (&filesys_lock);
 
   // 在 exit 之前把所有 mmap_list 里的文件都写回去
-  lock_acquire (&file_lock);
+  lock_acquire (&filesys_lock);
 
   struct mmap_descriptor *_mmap_descriptor;
   for (struct list_elem *e = list_begin (&thread_current ()->mmap_list);
@@ -220,7 +220,7 @@ process_exit (void)
 
           if (spte == NULL)
             {
-              lock_release (&file_lock);
+              lock_release (&filesys_lock);
               break;
             }
           int NoWrite = 0;
@@ -230,7 +230,7 @@ process_exit (void)
             }
           else
             {
-              unsigned hash = hash_bytes (spte->frame, spte->file_size);
+              unsigned hash = hash_bytes (spte->frame->kpage, spte->file_size);
               //printf ("%s:%d,hash: %u\n", __FILE__, __LINE__, hash);
               if (hash == spte->hash)
                 NoWrite = 1;
@@ -238,7 +238,7 @@ process_exit (void)
 
 
           if (NoWrite == 0)
-            file_write_at (_mmap_descriptor->file, spte->frame,
+            file_write_at (_mmap_descriptor->file, spte->frame->kpage,
                            ((i - (int) (_mmap_descriptor->addr)) % PGSIZE == 0)
                                ? PGSIZE
                                : (i - (int) (_mmap_descriptor->addr)),
@@ -252,7 +252,7 @@ process_exit (void)
       //free (_mmap_descriptor);
     }
 
-  lock_release (&file_lock);
+  lock_release (&filesys_lock);
 
 
   /* Destroy the current process's page directory and switch back
@@ -274,11 +274,11 @@ process_exit (void)
        e != list_end (&cur->fd_list); e = to_del)
     {
       struct file_descriptor *f = list_entry (e, struct file_descriptor, elem);
-      lock_acquire (&file_lock);
+      lock_acquire (&filesys_lock);
       file_close (f->file);
       to_del = list_next (e);
       free (f);
-      lock_release (&file_lock);
+      lock_release (&filesys_lock);
     }
 
   pd = cur->pagedir;

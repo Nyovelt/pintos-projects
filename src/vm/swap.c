@@ -39,9 +39,9 @@ swap_out (void *frame)
   if (index == (int) BITMAP_ERROR)
     return -1;
 
-  for (uint32_t i = 0; i < BLOCKS_PER_PAGE; i++)
+  for (int i = 0; i < BLOCKS_PER_PAGE; i++)
     block_write (swap_block, index + i, frame + i * BLOCK_SECTOR_SIZE);
-  //printf ("swap_out success\n");
+  //printf ("swap_out success: %p, index: %d, total: %d\n", frame, index, block_size (swap_block));
 
   return index;
 }
@@ -49,15 +49,21 @@ swap_out (void *frame)
 bool
 swap_in (uint32_t index, void *frame)
 {
-  //printf("to swap_in: %p, %d\n", frame);
-  if (frame == NULL || !is_user_vaddr (frame))
+  //printf("to swap_in: %p\n", frame);
+  if (frame == NULL || !is_kernel_vaddr (frame))
     return false;
 
   ASSERT (index != BITMAP_ERROR && index >= 0 && index < bitmap_size (sectors)
           && index % BLOCKS_PER_PAGE == 0)
+  ASSERT(bitmap_test(sectors, index));
 
-  for (uint32_t i = 0; i < BLOCKS_PER_PAGE; i++)
+  for (int i = 0; i < BLOCKS_PER_PAGE; i++)
+  {
     block_read (swap_block, index + i, frame + i * BLOCK_SECTOR_SIZE);
+    //printf("index %d complete\n", index + i);
+  }
+
+  //printf("read success\n");
 
   lock_acquire (&lock);
   bitmap_set_multiple (sectors, index, BLOCKS_PER_PAGE, FREE);

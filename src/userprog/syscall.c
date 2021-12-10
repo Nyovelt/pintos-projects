@@ -252,34 +252,31 @@ syscall_create (const char *file, unsigned initial_size)
 {
   if (strlen (file) == 0)
     return false;
-  lock_acquire (&file_lock);
+  lock_acquire (&filesys_lock);
   bool ret = filesys_create (file, initial_size);
-  lock_release (&file_lock);
+  lock_release (&filesys_lock);
   return ret;
 }
 
 static bool
 syscall_remove (const char *file)
 {
-  lock_acquire (&file_lock);
+  lock_acquire (&filesys_lock);
   bool ret = filesys_remove (file);
-  lock_release (&file_lock);
+  lock_release (&filesys_lock);
   return ret;
 }
 
 static int
 syscall_write (int fd, const void *buffer, unsigned size)
 {
-  lock_acquire (&file_lock);
   if (fd == STDOUT_FILENO)
     {
       putbuf (buffer, size);
-      lock_release (&file_lock);
       return size;
     }
   else if (fd == STDIN_FILENO)
     {
-      lock_release (&file_lock);
       return -1;
     }
   else
@@ -287,14 +284,11 @@ syscall_write (int fd, const void *buffer, unsigned size)
       struct file_descriptor *f = get_file_descriptor (fd);
       if (f == NULL || f->fd == 0 || f->file == NULL)
         {
-          lock_release (&file_lock);
           return -1;
         }
       int ret = file_write (f->file, buffer, size);
-      lock_release (&file_lock);
       return ret;
     }
-  lock_release (&file_lock);
   return -1;
 }
 
@@ -303,9 +297,9 @@ syscall_open (const char *file)
 {
   check_string (file);
 
-  lock_acquire (&file_lock);
+  lock_acquire (&filesys_lock);
   struct file *f = filesys_open (file);
-  lock_release (&file_lock);
+  lock_release (&filesys_lock);
 
   if (f == NULL)
     return -1;
@@ -323,14 +317,12 @@ static int
 syscall_close (int fd)
 {
   struct thread *t = thread_current ();
-  lock_acquire (&file_lock);
   for (struct list_elem *e = list_begin (&t->fd_list);
        e != list_end (&t->fd_list); e = list_next (e))
     {
       struct file_descriptor *f = list_entry (e, struct file_descriptor, elem);
       if (f == NULL || f->fd == 0)
         {
-          lock_release (&file_lock);
           return -1;
         }
       if (f->fd == fd)
@@ -338,91 +330,76 @@ syscall_close (int fd)
           if (f->mmaped > 0)
             {
               f->mmaped += 1;
-              lock_release (&file_lock);
               return 0;
             }
           else
             {
               list_remove (e);
+              lock_acquire (&filesys_lock);
               file_close (f->file);
+              lock_release (&filesys_lock);
               free (f);
-              lock_release (&file_lock);
               return 0;
             }
         }
     }
-  lock_release (&file_lock);
   return -1;
 }
 
 static int
 syscall_read (int fd, void *buffer, unsigned size)
 {
-  lock_acquire (&file_lock);
   if (fd == STDIN)
     {
       for (unsigned int i = 0; i < size; i++)
         *((char *) buffer + i) = input_getc ();
-      lock_release (&file_lock);
       return size;
     }
   else if (fd != STDOUT)
     {
       struct file_descriptor *f = get_file_descriptor (fd);
       if (f == NULL || f->fd == 0 || f->file == NULL)
-        {
-          lock_release (&file_lock);
-          return -1;
-        }
+        return -1;
+      lock_acquire (&filesys_lock);
       int bytes_read = file_read (f->file, buffer, size);
-      lock_release (&file_lock);
+      lock_release (&filesys_lock);
       return bytes_read;
     }
-  lock_release (&file_lock);
   return -1;
 }
 
 static int
 syscall_filesize (int fd)
 {
-  lock_acquire (&file_lock);
   struct file_descriptor *f = get_file_descriptor (fd);
   if (f == NULL || f->fd == 0 || f->file == NULL)
-    {
-      lock_release (&file_lock);
-      return -1;
-    }
+    return -1;
+  lock_acquire (&filesys_lock);
   int size = file_length (f->file);
-  lock_release (&file_lock);
+  lock_release (&filesys_lock);
   return size;
 }
 
 static void
 syscall_seek (int fd, unsigned position)
 {
-  lock_acquire (&file_lock);
   struct file_descriptor *f = get_file_descriptor (fd);
   if (f == NULL || f->fd == 0 || f->file == NULL)
-    {
-      lock_release (&file_lock);
       return;
-    }
+  lock_acquire (&filesys_lock);
   file_seek (f->file, position);
-  lock_release (&file_lock);
+  lock_release (&filesys_lock);
 }
 
 static unsigned
 syscall_tell (int fd)
 {
-  lock_acquire (&file_lock);
   struct file_descriptor *f = get_file_descriptor (fd);
   if (f == NULL || f->fd == 0 || f->file == NULL)
-    {
-      lock_release (&file_lock);
       return -1;
-    }
+  lock_acquire (&filesys_lock);
   int pos = file_tell (f->file);
-  lock_release (&file_lock);
+  lock_release (&filesys_lock);
   return pos;
 }
 
@@ -448,38 +425,22 @@ syscall_wait (pid_t pid)
 static mapid_t
 syscall_mmap (int fd, const void *addr)
 {
-
-  lock_acquire (&file_lock);
-
-
   struct file_descriptor *f
       = get_file_descriptor (fd); //  get file structer by fd
   if (f == NULL || f->fd < 2 || f->file == NULL)
-    {
-      lock_release (&file_lock);
       return -1;
-    }
   if (file_length (f->file) == 0)
-    {
-      lock_release (&file_lock);
       return -1; // file length is 0, fail
-    }
   if (addr == 0 || addr == NULL)
-    {
-      lock_release (&file_lock);
       return -1; // addr is 0 , fail
-    }
   if (addr != pg_round_down (addr))
-    {
-      lock_release (&file_lock);
       return -1; // addr is not page aligned, fail
-    }
   if (addr >= pg_round_down (thread_current ()->esp))
-    {
-      lock_release (&file_lock);
       return -1; // addr is pver stk, fail
-    }
+
+  lock_acquire (&filesys_lock);
   file_reopen (f->file); // reopen file
+  lock_release (&filesys_lock);
   // page_print (&thread_current ()->sup_page_table);
   // printf ("%s:%d: esp: %p\n", __FILE__, __LINE__,
   //         pg_round_down (thread_current ()->esp));
@@ -488,13 +449,8 @@ syscall_mmap (int fd, const void *addr)
     {
       // printf ("%s:%d: address: %p\n", __FILE__, __LINE__, addr + i);
       if (page_lookup (&thread_current ()->sup_page_table, addr + i) != NULL)
-        {
-          //printf ("%s:%d: here\n", __FILE__, __LINE__);
-          lock_release (&file_lock);
           return -1;
-        }
     }
-  int hack = 0;
   // 对于一个文件，创建 n 个补充页表，直到把这个文件装下为止, i是 offset
   for (int i = 0; i < file_length (f->file); i += PGSIZE)
     {
@@ -503,17 +459,11 @@ syscall_mmap (int fd, const void *addr)
           = malloc (sizeof (struct sup_page_table_entry)); // 创建一个页表
 
       if (spte == NULL)
-        {
-
-          lock_release (&file_lock);
-          return -1;
-        }                                       // 创建失败，返回 -1
-      void *frame = frame_get (PAL_USER, spte); // 获取一个空闲页面
+          return -1;                                   // 创建失败，返回 -1
+      struct frame_table_entry *frame = frame_get (PAL_USER, spte); // 获取一个空闲页面
       if (frame == NULL)
         {
-
           free (spte);
-          lock_release (&file_lock);
           return -1;
         }
 
@@ -545,14 +495,14 @@ syscall_mmap (int fd, const void *addr)
       if (!spte->frame)
         spte->frame = frame;
 
-      if (file_read_at (spte->file, frame, spte->file_size, spte->file_ofs)
+      if (file_read_at (spte->file, frame->kpage, spte->file_size, spte->file_ofs)
           != (off_t) spte->file_size)
         {
           spte->hash = 0;
         }
       else
         {
-          spte->hash = hash_bytes (frame, spte->file_size);
+          spte->hash = hash_bytes (frame->kpage, spte->file_size);
           //printf ("%s:%d,hash: %u\n", __FILE__, __LINE__, spte->hash);
         }
 
@@ -574,7 +524,6 @@ syscall_mmap (int fd, const void *addr)
 
   list_push_back (&thread_current ()->mmap_list, &_mmap_descriptor->elem);
   f->mmaped = 1;
-  lock_release (&file_lock);
   return _mmap_descriptor->mapid; //成功！返回 mapid
 }
 
@@ -583,14 +532,12 @@ syscall_munmap (mapid_t mapid)
 {
   int NoWrite = 0;
   //return;
-  lock_acquire (&file_lock);
   struct mmap_descriptor *_mmap_descriptor = get_mmap_descriptor (mapid);
   if (_mmap_descriptor == NULL)
-    {
-      lock_release (&file_lock);
       return;
-    }
+  lock_acquire (&filesys_lock);
   file_reopen (_mmap_descriptor->file);
+  lock_release (&filesys_lock);
   // page_print (&thread_current ()->sup_page_table);
   for (uint32_t i = _mmap_descriptor->addr;
        i < _mmap_descriptor->addr + _mmap_descriptor->file_size; i += PGSIZE)
@@ -599,10 +546,7 @@ syscall_munmap (mapid_t mapid)
           = page_lookup (&thread_current ()->sup_page_table, i);
 
       if (spte == NULL)
-        {
-          lock_release (&file_lock);
           return;
-        }
       // printf ("%s:%d, i: %u, size: %d, start: %d, \n buffer: %s,  \n", __FILE__,
       //         __LINE__, i,
       //         ((i - (int) (_mmap_descriptor->addr)) % PGSIZE == 0)
@@ -616,7 +560,7 @@ syscall_munmap (mapid_t mapid)
         }
       else
         {
-          unsigned hash = hash_bytes (spte->frame, spte->file_size);
+          unsigned hash = hash_bytes (spte->frame->kpage, spte->file_size);
           //printf ("%s:%d,hash: %u\n", __FILE__, __LINE__, hash);
           if (hash == spte->hash)
             NoWrite = 1;
@@ -626,7 +570,7 @@ syscall_munmap (mapid_t mapid)
       if ((NoWrite) == 0)
         {
           // printf ("write: %s:%d\n", __FILE__, __LINE__);
-          file_write_at (_mmap_descriptor->file, spte->frame,
+          file_write_at (_mmap_descriptor->file, spte->frame->kpage,
                          ((i - (int) (_mmap_descriptor->addr)) % PGSIZE == 0)
                              ? PGSIZE
                              : (i - (int) (_mmap_descriptor->addr)),
@@ -640,15 +584,11 @@ syscall_munmap (mapid_t mapid)
   if (_mmap_descriptor->fd->mmaped > 1)
     {
       _mmap_descriptor->fd->mmaped = 0;
-      lock_release (&file_lock);
       syscall_close (_mmap_descriptor->fd);
-      lock_acquire (&file_lock);
     }
   list_remove (&_mmap_descriptor->elem);
   free (_mmap_descriptor);
   // _mmap_descriptor->dead = 1;
-
-  lock_release (&file_lock);
 }
 
 static struct mmap_descriptor *

@@ -93,7 +93,7 @@ thread_init (void)
 
   lock_init (&tid_lock);
 #ifdef USERPROG
-  lock_init(&file_lock);
+  lock_init(&filesys_lock);
 #endif
   list_init (&ready_list);
   list_init (&all_list);

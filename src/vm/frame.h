@@ -12,13 +12,15 @@ struct frame_table_entry
     void *kpage;                // frame pointer
     struct thread *owner;       // owner of the frame
     struct sup_page_table_entry *upage; // auxiliary page entry
-    // maybe other info
+    
+    /* For clock algorithm */
+    bool used;
     bool dirty;
 };
 
 void frame_init (void); // Initialize frame table
-void *frame_get (enum palloc_flags flags, struct sup_page_table_entry *upage);
-struct frame_table_entry *frame_lookup (const void *frame);
+struct frame_table_entry *frame_get (enum palloc_flags flags, struct sup_page_table_entry *upage);
+//struct frame_table_entry *frame_lookup (const void *frame);
 
 void frame_free (struct frame_table_entry *fte);
 

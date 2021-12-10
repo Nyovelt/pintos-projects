@@ -36,9 +36,9 @@ spte_less (const struct hash_elem *a, const struct hash_elem *b,
 }
 
 static void
-page_load_zero (struct sup_page_table_entry *spte, void *upage, void *frame)
+page_load_zero (struct sup_page_table_entry *spte, void *upage, void *kpage)
 {
-  memset (frame, 0, PGSIZE);
+  memset (kpage, 0, PGSIZE);
 
   spte->vaddr = upage;
   spte->writable = true;
@@ -46,26 +46,28 @@ page_load_zero (struct sup_page_table_entry *spte, void *upage, void *frame)
 }
 
 static bool
-page_load_swap (struct sup_page_table_entry *spte, void *frame)
+page_load_swap (struct sup_page_table_entry *spte, void *kpage)
 {
-  if(!swap_in(spte->swap_id, frame))
+  //printf("begin swap in\n");
+  if(!swap_in(spte->swap_id, kpage))
     return false;
-  spte->frame = frame;
-  //printf("swap in %d\n", spte->swap_id);
+  //printf("swap complete\n");
   return true;
 }
 
 static bool
-page_load_file (struct sup_page_table_entry *spte, void *frame)
+page_load_file (struct sup_page_table_entry *spte, void *kpage)
 {
-  if (file_read_at (spte->file, frame, spte->file_size, spte->file_ofs)
+  if (file_read_at (spte->file, kpage, spte->file_size, spte->file_ofs)
       != (off_t) spte->file_size)
     {
-      frame_free (frame);
+      palloc_free_page(kpage);
+      frame_free (kpage);
       return false; // fail in file_read_at
     }
 
-  memset (frame + spte->file_size, 0, PGSIZE - spte->file_size);
+  memset (kpage + spte->file_size, 0, PGSIZE - spte->file_size);
+  //printf("load to %p\n", kpage);
   return true;
 }
 
@@ -92,7 +94,7 @@ page_lookup (struct hash *spt, const void *addr)
 }
 
 bool
-page_record (struct hash *spt, const void *upage, bool writable,
+page_record (struct hash *spt, void *upage, bool writable,
              struct file *file, off_t ofs, uint32_t read_bytes, bool in_stack)
 {
   ASSERT (pg_ofs (upage) == 0);
@@ -103,7 +105,7 @@ page_record (struct hash *spt, const void *upage, bool writable,
       = malloc (sizeof (struct sup_page_table_entry));
   if (spte == NULL)
     return false; // fail in malloc
-  //printf("spte recorded: %p\n", spte);
+  //printf("spte recorded: %p\n", upage);
   spte->vaddr = upage;
   spte->writable = writable;
   spte->is_stack = in_stack;
@@ -122,18 +124,15 @@ page_record (struct hash *spt, const void *upage, bool writable,
   return true;
 }
 
-int
-checksum (void *frame)
-{
-}
-
 bool
 page_load (struct hash *spt, const void *vaddr, bool write, void *esp)
 {
   void *upage = pg_round_down (vaddr);
   struct sup_page_table_entry *spte
       = page_lookup (spt, upage); // 在补充页表里找在不在
-  void *frame = frame_get (PAL_USER, spte);
+  struct frame_table_entry *frame = frame_get (PAL_USER, spte);
+  if (frame == NULL)
+    return false;
   //printf ("page_load - frame: %p, upage: %p\n", frame, upage);
 
   if (spte == NULL) //|| (spte->present && spte->swapped) || )
@@ -149,7 +148,7 @@ page_load (struct hash *spt, const void *vaddr, bool write, void *esp)
 
       //printf("spte zeroed: %p\n", spte);
 
-      page_load_zero (spte, upage, frame);
+      page_load_zero (spte, upage, frame->kpage);
 
       //printf ("insert in spt: %p\n", spt);
       if (hash_insert (spt, &spte->hash_elem) != NULL)
@@ -167,23 +166,25 @@ page_load (struct hash *spt, const void *vaddr, bool write, void *esp)
 
       if (write && !spte->writable)
         return false;
-      //printf("%p, BOOL: %d, INT: %d\n", spte, spte->swapped, spte->swap_id);
+      //printf("swap or file: %p, INT: %d\n", spte->vaddr, spte->swap_id);
       if (spte->swap_id != -1)
         {
           ASSERT (spte->frame == NULL);
-          if (!page_load_swap (spte, frame))
+          if (!page_load_swap (spte, frame->kpage))
             return false;
         }
       else
         {
           // 打开文件
           ASSERT (spte->file != NULL);
-          page_load_file (spte, frame);
+          page_load_file (spte, frame->kpage);
         }
     }
 
-  if (frame == NULL || !install_page (upage, frame, spte->writable))
+  if (!install_page (upage, frame->kpage, spte->writable))
     {
+      printf("failed to install page %p", frame);
+      palloc_free_page(frame->kpage);
       frame_free (frame);
       page_free (spt, spte);
       return false; // fail in install_page
@@ -191,6 +192,7 @@ page_load (struct hash *spt, const void *vaddr, bool write, void *esp)
 
   spte->frame = frame; // 把这个页填进去
   spte->swap_id = -1;
+  //printf("lazy loading success\n");
   return true;
 };
 
@@ -209,11 +211,13 @@ page_free (struct hash *spt, const void *vaddr)
 bool
 page_fault_handler (struct hash *spt, const void *addr, bool write, void *esp)
 {
+  //printf("fault addr: %p\n", addr);
   if (addr == NULL || is_kernel_vaddr (addr)) // 有错就真的错
     return false;
 
   if (is_user_vaddr (addr)) // && addr >= STACK_LIMIT && addr >= esp - 32)
     {
+      //printf("fake fault: %p\n", addr);
       if (page_load (spt, addr, write, esp))
         return true; // 成功解决了
     }
