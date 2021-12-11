@@ -355,7 +355,9 @@ It is the same as our answer to `A1`. But the following is important to MMAP, wh
 
 When `syscall_mmap` is called, we will grab serveral pages from memory by `frame_get`, which establishes a map of physical memory and virtual memory. We will then store them (the frame of file properties) into `sup_page_table_entry` and new a `mmap_descriptor` object in the thread just as `file_descriptor` in Project 2.
 
-TODO: evict and page fault.
+In our design, swap page have no differnt when page fault is happening. In face, swap page should be recycled and cause no exit.  Other real page fault will cause exit. 
+
+Though we may not implement, when a mmap instance is evict, it should de write back.
 
 > C3: Explain how you determine whether a new file mapping overlaps
 > any existing segment.
