@@ -57,7 +57,8 @@ frame_evict ()
   fte->upage->swap_id = index; // needed for reclaiming
   fte->upage->frame = NULL;    // unmap upage
   void *ret = fte->kpage;
-  lock_release (&fte->lock);
+  if (lock_held_by_current_thread (&fte->lock))
+    lock_release (&fte->lock);
   frame_clear (fte);
   return ret;
 }
@@ -84,6 +85,7 @@ frame_get (enum palloc_flags flags, struct sup_page_table_entry *upage)
       palloc_free_page (kpage);
       return NULL;
     }
+  lock_init (&fte->lock);
 
   /* Bookeeping for frames */
   fte->kpage = kpage;
@@ -91,7 +93,6 @@ frame_get (enum palloc_flags flags, struct sup_page_table_entry *upage)
   fte->owner = thread_current ();
   fte->used = 1;
   hash_insert (&frame_table, &fte->hash_elem);
-  lock_init (&fte->lock);
   return fte;
 }
 

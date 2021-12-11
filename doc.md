@@ -18,7 +18,7 @@ Feiran Qin <qinfr@shanghaitech.edu.cn>
 > TAs, or extra credit, please give them here.
 
 > Please cite any offline or online sources you consulted while
-> preparing your submission, other than the Pintos documentation, course
+> preparing your submission, other than the PintOS documentation, course
 > text, lecture notes, and course staff.
 
             PAGE TABLE MANAGEMENT
@@ -96,7 +96,7 @@ struct frame_table_entry
 > A2: In a few paragraphs, describe your code for accessing the data
 > stored in the SPT about a given page.
 
-Normally, the pintos will get trap of `page_fault` if it is accessing a unaccessable page, with an address. We have decleared a function called `page_fault_handler` to handle this situation. In this function, we will check if the page is in the SPT, if it is, we will return the frame pointer of the page, if not, we will allocate a new frame and return the frame pointer. And there are also some techniques about page replacement algorithm, but we decoded not to show it in this answer.
+Normally, the PintOS will get trap of `page_fault` if it is accessing a unaccessable page, with an address. We have decleared a function called `page_fault_handler` to handle this situation. In this function, we will check if the page is in the SPT, if it is, we will return the frame pointer of the page, if not, we will allocate a new frame and return the frame pointer. And there are also some techniques about page replacement algorithm, but we decoded not to show it in this answer.
 
 And to look up pages in spt, since we are using `hash_table` to store supplemental table entries, we can use `hash_find` to find the entry. It can be shown in the `page_lookup` function.
 
@@ -154,7 +154,7 @@ We obtain a map of an address, a frame and other information. By mapping, we can
 
 It is the same as our answer to  `A1`. 
 
-1. Page: For storing supplemental information about a page.
+1. Page: For storing supplemental information about a `page`.
 ```C
 struct sup_page_table_entry
 {
@@ -176,7 +176,7 @@ struct sup_page_table_entry
     unsigned hash;
 };
 ```
-2. Frame: For storing supplemental information about a frame.
+2. Frame: For storing supplemental information about a `frame`.
 ```C
 struct frame_table_entry
 {
@@ -191,13 +191,13 @@ struct frame_table_entry
     bool dirty;
 };
 ```
-3. Thread: For storing threadable supplemental page table, memory map information and other entries.
+3. Thread: storing per-thread supplemental page table, memory map information and other entries.
 ```C
 #ifdef VM
     /* Owned by vm/page.c. */
-    struct hash sup_page_table; // 页表
-    void *esp;                  // 临时的esp
-    struct list mmap_list;      // 保存这个进程所有的  memory map
+    struct hash sup_page_table;
+    void *esp;                  // temporary esp
+    struct list mmap_list;      // store all memory mapping
     mapid_t next_mapid;         // next map id
 
     struct mmap_descriptor
@@ -265,7 +265,7 @@ frame_init ()
 > process Q, how do you adjust the page table (and any other data
 > structures) to reflect the frame Q no longer has?
 
-As described in **pintos-Guide**,
+As described in *PintOS Guide*,
 
 • You will be evicting the frame, therefore you the page associated with the frame you have selected needs to be unlinked. Then you want to remove this frame from your frame table after you have freed the frame with pagedir_clear_page
 
@@ -278,7 +278,7 @@ As described in **pintos-Guide**,
 > invalid virtual address should cause the stack to be extended into
 > the page that faulted.
 
-First the user memory is between `0x8000000` to `0xC000000`, which is the valid zone. Next, the address should above the `esp-32` for it's the zone for stack. So when `page_fault` happens from `esp-32` to `PHYS_BASE`, we will consider it can be a stack growth, which is also mentioned in the **PintOS Guide.**
+First the user memory is between `0x8000000` to `0xC000000`, which is the valid region. Next, the address should above the `esp-32` if it is for stack. So when `page_fault` happens from `esp-32` to `PHYS_BASE`, we will consider it can be a stack growth, which is also mentioned in the *PintOS Guide.*
 
 ---- SYNCHRONIZATION ----
 
@@ -287,21 +287,21 @@ First the user memory is between `0x8000000` to `0xC000000`, which is the valid 
 > textbook for an explanation of the necessary conditions for
 > deadlock.)
 
-//TODO: 
+We use global `swap` lock and per-frame frame lock. We acquire the lock when scanning/reading/writing to swap slots and operation on frame. To prevent deadlocks, we make sure that any calls to the data structure between the code of our data structures do not try to obtain a lock more than once. We also avoid calling functions which require other data structure’s lock. We avoid holding a lock guarding a large operation while performing I/O, which may block other page-faults that don’t require I/O. Per-frame lock also prevent potential lock violation.
 
 > B6: A page fault in process P can cause another process Q's frame
 > to be evicted.  How do you ensure that Q cannot access or modify
 > the page during the eviction process?  How do you avoid a race
 > between P evicting Q's frame and Q faulting the page back in?
 
-the `frame_table_entry` records `  struct sup_page_table_entry *upage;`  and ` struct thread *owner;`so we can prevent this from happening.
+We obtain the lock of the frame in frame-eviction function and page-frame loading function, and when evicting, we use `lock_try_acquire` to check whether it is locked by other threads, as it immediately continue to the next frame when failed. Also, we check the owner of the frame upon evection. 
 
 > B7: Suppose a page fault in process P causes a page to be read from
 > the file system or swap.  How do you ensure that a second process Q
 > cannot interfere by e.g. attempting to evict the frame while it is
 > still being read in?
 
-//TODO: 
+When reading data, the frame is locked. It will be skipped by `lock_try_acquire` in the eviction function.
 
 > B8: Explain how you handle access to paged-out pages that occur
 > during system calls.  Do you use page faults to bring in pages (as
@@ -309,9 +309,7 @@ the `frame_table_entry` records `  struct sup_page_table_entry *upage;`  and ` s
 > into physical memory, or do you use some other design?  How do you
 > gracefully handle attempted accesses to invalid virtual addresses?
 
-```
-exit(-1)
-```
+We use page faults to bring in pages. In `load_segment`, we just record necessary info in the supplemental page table record instead of actually allocating pages immediately, When an “invalid” virtual address is addressed, our own page fault handler is called in the page fault, and It will determine whether this is stack growth or reading from a file/swap slot and then proceed to add an empty zero page, file reading or swap block reading respectively, and finally let the process continue execution. If the address is really invalid, e.g. not in user space or out of stack, we pass it to the original real page fault handler.
 
 ---- RATIONALE ----
 
@@ -322,7 +320,7 @@ exit(-1)
 > where your design falls along this continuum and why you chose to
 > design it this way.
 
-We use a single lock since pintos has limited support for parallelism.
+We prefer a single lock since PintOS has limited support for parallelism and this will make the debugging process easier and is safer. More sophisticated lock-mechanism can make our life harder a lot though it has better performance.
 
 
              MEMORY MAPPED FILES
