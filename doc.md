@@ -1,4 +1,4 @@
-            +---------------------------+
+​            +---------------------------+
 ​            |          CS 140          |
 ​            | PROJECT 3: VIRTUAL MEMORY |
 ​            |      DESIGN DOCUMENT      |
@@ -220,7 +220,10 @@ struct frame_table_entry
 > B2: When a frame is required but none is free, some frame must be
 > evicted.  Describe your code for choosing a frame to evict.
 
-Clock algorithm
+Clock algorithm.
+
+A clock pointer points to the beginning of a particular frame. When a replacement must be made, the operating system checks whether the `use` bit of the currently pointed frame is `1` or `0`. If it is `1`, this means that the frame has been used recently and is therefore not suitable for replacement. Therefore, the `use` bit is set to `0` (cleared) and the clock pointer is incremented to the next page. This algorithm continues until a use bit is found that is set to `0`, meaning that the page has not been used recently. For simplity, we choose the last one that we see if all pages have been accessed.
+
 ```C
 static void *
 frame_evict ()
@@ -252,13 +255,6 @@ frame_evict ()
   lock_release (&fte->lock);
   frame_clear (fte);
   return ret;
-}
-
-void
-frame_init ()
-{
-  hash_init (&frame_table, frame_hash, frame_less, NULL);
-  lock_init (&lock);
 }
 ```
 > B3: When a process P obtains a frame that was previously used by a
