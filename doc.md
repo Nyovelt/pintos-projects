@@ -1,17 +1,16 @@
-             +--------------------------+
-             |          CS 140          |
-             | PROJECT 2: USER PROGRAMS |
-             |     DESIGN DOCUMENT      |
-             +--------------------------+
+            +---------------------------+
+            |          CS 140          |
+            | PROJECT 3: VIRTUAL MEMORY |
+            |      DESIGN DOCUMENT      |
+            +---------------------------+
 
----- GROUP 15 ----
+---- GROUP ----
 
 > Fill in the names and email addresses of your group members.
 
-Yining Zhang <zhangyn3@shanghaitech.edu.cn>
-Feiran Qin <qinfr@shanghaitech.edu.cn>
+Yining Zhang <zhangyn@shanghaitech.edu.cn>
 
-Yining Zhang did the project-setup and stack-setup, and did part of the system call, while Feiran Qin did the design of the functions involving the file descriptor. We did the `execute`, `exit` and `wait` together.
+Feiran Qin <qinfr@shanghaitech.edu.cn>
 
 ---- PRELIMINARIES ----
 
@@ -22,14 +21,8 @@ Yining Zhang did the project-setup and stack-setup, and did part of the system c
 > preparing your submission, other than the Pintos documentation, course
 > text, lecture notes, and course staff.
 
-Ref: 
-- [CS318 - Pintos
-Pintos source browser for JHU CS318 course
-](https://jhu-cs318.github.io/pintos-doxygen/html/index.html)
-
-
-               ARGUMENT PASSING
-               ================
+            PAGE TABLE MANAGEMENT
+            =====================
 
 ---- DATA STRUCTURES ----
 
@@ -37,51 +30,121 @@ Pintos source browser for JHU CS318 course
 > `struct' member, global or static variable, `typedef', or
 > enumeration.  Identify the purpose of each in 25 words or less.
 
-No `struct` member, global or static variable, `typedef' or enumeration were introduced.
+1. Page: For storing supplemental information about a page.
+```C
+struct sup_page_table_entry
+{
+    struct hash_elem hash_elem;
+    struct frame_table_entry *frame;
+    void *vaddr;   // virtual address of the page
+    bool writable; // is the page writable?
+    bool is_stack; // is the page in user stack (or in .data/.text)?
+
+    /* For swap */
+    int swap_id;
+
+    /* For file operations */
+    struct file *file;
+    off_t file_ofs;
+    uint32_t file_size;
+
+    /* For mmap */
+    unsigned hash;
+};
+```
+2. Frame: For storing supplemental information about a frame.
+```C
+struct frame_table_entry
+{
+    struct hash_elem hash_elem; // hash_elem for hash_list
+    struct lock lock;
+    void *kpage;                        // frame pointer
+    struct thread *owner;               // owner of the frame
+    struct sup_page_table_entry *upage; // auxiliary page entry
+
+    /* For clock algorithm */
+    bool used;
+    bool dirty;
+};
+```
+3. Thread: For storing threadable supplemental page table, memory map information and other entries.
+```C
+#ifdef VM
+    /* Owned by vm/page.c. */
+    struct hash sup_page_table; // 页表
+    void *esp;                  // 临时的esp
+    struct list mmap_list;      // 保存这个进程所有的  memory map
+    mapid_t next_mapid;         // next map id
+
+    struct mmap_descriptor
+    {
+        struct list_elem elem;
+        mapid_t mapid;
+        struct file *file;
+        void *addr;
+        uint32_t file_size;
+        struct file_descriptor *fd;
+        bool dead;
+        int hack;
+    } mmap_descriptor;
+
+#endif
+```
 
 ---- ALGORITHMS ----
 
-> A2: Briefly describe how you implemented argument parsing.  How do
-> you arrange for the elements of argv[] to be in the right order?
-> How do you avoid overflowing the stack page?
+> A2: In a few paragraphs, describe your code for accessing the data
+> stored in the SPT about a given page.
 
-```C
-  char *argv_[ARGS_LIMIT];
-  char *token, *save_ptr;
-  int argc = 0;
-  for (token = strtok_r (fn_copy, " ", &save_ptr);
-       token != NULL;
-       token = strtok_r (NULL, " ", &save_ptr))
-    argv_[argc++] = token;
-  argv_[argc] = NULL;
-```
+Normally, the pintos will get trap of `page_fault` if it is accessing a unaccessable page, with an address. We have decleared a function called `page_fault_handler` to handle this situation. In this function, we will check if the page is in the SPT, if it is, we will return the frame pointer of the page, if not, we will allocate a new frame and return the frame pointer. And there are also some techniques about page replacement algorithm, but we decoded not to show it in this answer.
 
-We use the function  `strtok_r()`. If it meets the second argument, which is `"  "` in this case, it will split the string into tokens, and return the first token. Then it will save the pointer of the first token, and use it to split the next token. The process will continue until the string is empty. The last token will be NULL. 
+And to look up pages in spt, since we are using `hash_table` to store supplemental table entries, we can use `hash_find` to find the entry. It can be shown in the `page_lookup` function.
 
-The point is that, for example, first argument is a = ABC0EF0GG, it will return a pointer, point to the a[0], and change a into ABC \0 EF0GG ,then point to a[5], and change a into ABC \0 EF \0 GG. 
+> A3: How does your code coordinate accessed and dirty bits between
+> kernel and user virtual addresses that alias a single frame, or
+> alternatively how do you avoid the issue?
 
-Since `fn_copy` is creat by `palloc_get_page (0)`, it will exist until ` palloc_free_page (fn_copy);` is called. That will ensure the memory safe.
+Kernel and User can only access to pages by our `page_load()`, and we have algorithms to avoid race.
 
-And the document says that there has a ARGS_LIMIT of 128. `And palloc_get_page (0)` will return a page with size of 4096 bytes. So it won't overflow the stack page.
+---- SYNCHRONIZATION ----
 
-Another way to avoid overflow is to use stack_push function, since stack is considerably larger, it has an advantage that  it will not be affected by ARGS_LIMIT. But it will be a little bit complicated. And our way also works fine.
+> A4: When two user processes both need a new frame at the same time,
+> how are races avoided?
+
+We use `lock`.
 
 ---- RATIONALE ----
 
-> A3: Why does Pintos implement strtok_r() but not strtok()?
+> A5: Why did you choose the data structure(s) that you did for
+> representing virtual-to-physical mappings?
 
-`strtok()` uses globa ldata thus is not thread safe, and `strtok_r()` is the thread-safe alternative.
+```C
+struct sup_page_table_entry
+{
+    struct hash_elem hash_elem;
+    struct frame_table_entry *frame;
+    void *vaddr;   // virtual address of the page
+    bool writable; // is the page writable?
+    bool is_stack; // is the page in user stack (or in .data/.text)?
 
-> A4: In Pintos, the kernel separates commands into a executable name
-> and arguments.  In Unix-like systems, the shell does this
-> separation.  Identify at least two advantages of the Unix approach.
+    /* For swap */
+    int swap_id;
 
-1. Pipeline
-2. The shell can be used to execute commands in a batch file.
+    /* For file operations */
+    struct file *file;
+    off_t file_ofs;
+    uint32_t file_size;
+
+    /* For mmap */
+    unsigned hash;
+};
+```
+
+We obtains a map of address and frame, and other properties. By mapping, we can give the corresponding frame to user/kernel when they need to visit it. By obtaining properties, we can handle more kinds of memory visit, such as file and swap. We choose it because it can record everything we need so that we can access to it if we need to do checking, it is friendly to programme.
 
 
-                 SYSTEM CALLS
-                 ============
+               PAGING TO AND FROM DISK
+               =======================
 
 ---- DATA STRUCTURES ----
 
@@ -89,188 +152,237 @@ Another way to avoid overflow is to use stack_push function, since stack is cons
 > `struct' member, global or static variable, `typedef', or
 > enumeration.  Identify the purpose of each in 25 words or less.
 
-In `threads.h`
+It is the same as our answer to  `A1`. 
 
+1. Page: For storing supplemental information about a page.
 ```C
-/* Lock used to manipulate files across threads */
-struct lock file_lock;
+struct sup_page_table_entry
+{
+    struct hash_elem hash_elem;
+    struct frame_table_entry *frame;
+    void *vaddr;   // virtual address of the page
+    bool writable; // is the page writable?
+    bool is_stack; // is the page in user stack (or in .data/.text)?
 
-struct thread
-  {
-    ...
-#ifdef USERPROG
-    /* Owned by userprog/process.c. */
-    uint32_t *pagedir;                  /* Page directory. */
-    int exit_code;                      /* Exit code. */
+    /* For swap */
+    int swap_id;
 
-    int next_fd;
-    struct list fd_list;
-    struct file_descriptor
-    {
-      struct file *file;
-      int fd;
-      struct list_elem elem;
-    } file_descriptor_;               // record the list of opened files
+    /* For file operations */
+    struct file *file;
+    off_t file_ofs;
+    uint32_t file_size;
 
-    /* begin exec */
-    struct list child_list;           // eist of child processes
-    struct list_elem child_elem;      // elements in the list of child processes
-    enum exec_status {
-      SUCCESS,
-      FAIL,
-      WAITING,
-      FINISHED
-    } load_status;                    // logging child process loads
-    struct semaphore sema_load;       // wait for a child process to finish loading
-    struct semaphore child_sema_load; // tell child processes to continue execution
-    struct semaphore sema_wait;       // wait for a child process to finish running
-    struct semaphore child_sema_wait; // tell child processes to continue to exit
-    int exit_status;                  // status code returned to the parent when exits
-    struct thread *parent;            // identify parent process
-    struct file *self;                // identify the execute file
-#endif
-  }
+    /* For mmap */
+    unsigned hash;
+};
 ```
+2. Frame: For storing supplemental information about a frame.
+```C
+struct frame_table_entry
+{
+    struct hash_elem hash_elem; // hash_elem for hash_list
+    struct lock lock;
+    void *kpage;                        // frame pointer
+    struct thread *owner;               // owner of the frame
+    struct sup_page_table_entry *upage; // auxiliary page entry
 
-> B2: Describe how file descriptors are associated with open files.
-> Are file descriptors unique within the entire OS or just within a
-> single process?
+    /* For clock algorithm */
+    bool used;
+    bool dirty;
+};
+```
+3. Thread: For storing threadable supplemental page table, memory map information and other entries.
+```C
+#ifdef VM
+    /* Owned by vm/page.c. */
+    struct hash sup_page_table; // 页表
+    void *esp;                  // 临时的esp
+    struct list mmap_list;      // 保存这个进程所有的  memory map
+    mapid_t next_mapid;         // next map id
 
-A file descriptor is a struct that holds a unique 'fd' and a pointer to the corresponding file, and for each process, the file descriptor is stored in a list of open files.
+    struct mmap_descriptor
+    {
+        struct list_elem elem;
+        mapid_t mapid;
+        struct file *file;
+        void *addr;
+        uint32_t file_size;
+        struct file_descriptor *fd;
+        bool dead;
+        int hack;
+    } mmap_descriptor;
 
-File descriptors are unique just within a single process, because a file can be opened by different processes and has a separate file descriptor in each process
+#endif
+```
 
 ---- ALGORITHMS ----
 
-> B3: Describe your code for reading and writing user data from the
-> kernel.
+> B2: When a frame is required but none is free, some frame must be
+> evicted.  Describe your code for choosing a frame to evict.
 
-**Read:**
-
-First check if the memory pointed by buffer is valid, then get the `file_lock`. Then determine the input mode according to `fd`: if it is `STDIN`, read input from standard input. If it is not `STDIN` or `STDOUT`, find and open the file according to `fd` and call the system function `file_read` to read it. In case of errors or conditions other than those mentioned above, release the lock and return `-1`. If an error is returned or execution is complete, release the lock.
-
-**Write:**
-
-First check if the memory pointed by buffer is valid, then get the file_lock, and if `fd` is `STDIN`, call `putbuf` to print out the contents of the buffer. If it is not `STDIN` or `STDOUT`, find and open the file according to `fd` and call the system function `file_write` to read it.
-
-> B4: Suppose a system call causes a full page (4,096 bytes) of data
-> to be copied from user space into the kernel.  What is the least
-> and the greatest possible number of inspections of the page table
-> (e.g. calls to pagedir_get_page()) that might result?  What about
-> for a system call that only copies 2 bytes of data?  Is there room
-> for improvement in these numbers, and how much?
-
-If the size of the data is within the size of one page and greater than or equal to one byte, it will only be stored on one page of memory or on two pages. So the least possible number of inspections of the page table is 1 and the greatest is 2. The result is the same for the two-byte case. We can't think of any improvements at the moment.
-
-> B5: Briefly describe your implementation of the "wait" system call
-> and how it interacts with process termination.
-
+时钟算法
 ```C
-int
-process_wait (tid_t child_tid UNUSED)
+static void *
+frame_evict ()
 {
-  // dosomething
-  sema_down (&chd->sema_wait);
-  //do something
-  sema_up (&chd->child_sema_wait);
-  return exit_code;
-}
-```
+  struct frame_table_entry *fte = NULL;
+  struct hash_iterator clock;
+  hash_first (&clock, &frame_table);
+  while (hash_next (&clock))
+    {
+      fte = hash_entry (hash_cur (&clock), struct frame_table_entry, hash_elem);
+      if (!lock_held_by_current_thread (&fte->lock)
+          && !lock_try_acquire (&fte->lock))
+        continue;
 
-```C
+      /* Check if used */
+      if (!fte->used)
+        break;
+      else
+        fte->used = 0;
+    }
+
+  int index = swap_out (fte->kpage);
+  if (index == -1)
+    return NULL;
+
+  fte->upage->swap_id = index; // needed for reclaiming
+  fte->upage->frame = NULL;    // unmap upage
+  void *ret = fte->kpage;
+  lock_release (&fte->lock);
+  frame_clear (fte);
+  return ret;
+}
+
 void
-process_exit (void)
+frame_init ()
 {
-  // do something
-  sema_up (&cur->sema_wait);
-  // do something
-  if (cur->parent != NULL)
-    sema_down (&cur->child_sema_wait);
-  // do something
+  hash_init (&frame_table, frame_hash, frame_less, NULL);
+  lock_init (&lock);
 }
 ```
-We use **two sema**, if P wait C befire C exit, the `process_wait()` function will down a semaA to wait for C to exit. If C exit before P wait, the `process_wait()` function will up a semaA to tell P that C exit. and down a semaB to wait for P to save the information such as `exit_code`. 
+> B3: When a process P obtains a frame that was previously used by a
+> process Q, how do you adjust the page table (and any other data
+> structures) to reflect the frame Q no longer has?
 
-> B6: Any access to user program memory at a user-specified address
-> can fail due to a bad pointer value.  Such accesses must cause the
-> process to be terminated.  System calls are fraught with such
-> accesses, e.g. a "write" system call requires reading the system
-> call number from the user stack, then each of the call's three
-> arguments, then an arbitrary amount of user memory, and any of
-> these can fail at any point.  This poses a design and
-> error-handling problem: how do you best avoid obscuring the primary
-> function of code in a morass of error-handling?  Furthermore, when
-> an error is detected, how do you ensure that all temporarily
-> allocated resources (locks, buffers, etc.) are freed?  In a few
-> paragraphs, describe the strategy or strategies you adopted for
-> managing these issues.  Give an example.
+As described in **pintos-Guide**,
 
-For each address, we check the validity using the system-provided `is_user_vaddr` and `pagedir_get_page`. For each block of memory pointed by the pointer, we check the head and tail of the memory block using the above method. Based on the above method, for memory of known size, we check the first, last and each page. For strings, we check them one by one by traversing towards `\0`.
+• You will be evicting the frame, therefore you the page associated with the frame you have selected needs to be unlinked. Then you want to remove this frame from your frame table after you have freed the frame with pagedir_clear_page
 
-For locks, we release the lock before returning the error code. For temporarily allocated resources, the resources allocated are released in `process_exit`. We just need to make sure that all errors are properly jumped and exited.
+• You do not want to delete the supplementary page table entry associated with the selected frame. The process that was using the frame should still have the illusion that they still have this page allocated to them. If you delete this page table entry, you will not be able to reclaim the data from disk when needed.
 
-For example, in `syscall_close`, we have some code shown below:
-```C
-if (f == NULL || f->fd == 0)
-  {
-    lock_release (&file_lock);
-    return -1;
-  }
-```
-After `return -1`, the lock is freed and the `eax` get the error code `-1` then the process exit with `-1`. Then in `process_exit`, the file descriptors accocated before are freed.
+• Find a free block to write your data to. Since the blocks are just numbered contiguously, you just need an index that is free. Now this index is going to be needed to reclaim the data of the page, therefore it would be best to keep this index of where the data is in some member variable in the supplemental page table entry
+
+• You’ll also want to keep track of which pages are evicted and which are not for quick checking
+> B4: Explain your heuristic for deciding whether a page fault for an
+> invalid virtual address should cause the stack to be extended into
+> the page that faulted.
+
+First the user memory is between `0x8000000` to `0xC000000`, which is the valid zone. Next, the address should above the `esp-32` for it's the zone for stack. So when `page_fault` happens from `esp-32` to `PHYS_BASE`, we will consider it can be a stack growth, which is also mentioned in the **PintOS Guide.**
 
 ---- SYNCHRONIZATION ----
 
-> B7: The "exec" system call returns -1 if loading the new executable
-> fails, so it cannot return before the new executable has completed
-> loading.  How does your code ensure this?  How is the load
-> success/failure status passed back to the thread that calls "exec"?
+> B5: Explain the basics of your VM synchronization design.  In
+> particular, explain how it prevents deadlock.  (Refer to the
+> textbook for an explanation of the necessary conditions for
+> deadlock.)
 
-We use **two sema**. One is for the parent process to wait for the child process to finish loading. The other is for the child process to wait for the parent process to finish loading. When the child process finishes loading, it will call `sema_up` on the `child_sema_load` semaphore. When the parent executing, it will first down the semaphore to wait for the child process to load. In the `load()` function, the child process will store whether it is sucess in the status of thread, which has status of SUCUCESS and FAIL. It is an Int variable in the structure of thread. 
+//TODO: 
 
-One problem we have met before is that the MAIN thread won't go through the `syscall_exec` and the program will stucked in the `start_process` function, since it is waiting for a sema never up. The solution is that let the `process_execute` to manage sema and entities other than `syscall_exec`.
+> B6: A page fault in process P can cause another process Q's frame
+> to be evicted.  How do you ensure that Q cannot access or modify
+> the page during the eviction process?  How do you avoid a race
+> between P evicting Q's frame and Q faulting the page back in?
 
-> B8: Consider parent process P with child process C.  How do you
-> ensure proper synchronization and avoid race conditions when P
-> calls wait(C) before C exits?  After C exits?  How do you ensure
-> that all resources are freed in each case?  How about when P
-> terminates without waiting, before C exits?  After C exits?  Are
-> there any special cases?
+the `frame_table_entry` records `  struct sup_page_table_entry *upage;`  and ` struct thread *owner;`so we can prevent this from happening.
 
-We use **two sema**, if P wait C befire C exit, the `process_wait()` function will down a semaA to wait for C to exit. If C exit before P wait, the `process_wait()` function will up a semaA to tell P that C exit. and down a semaB to wait for P to save the information such as `exit_code`. If `process_wait()` is down, it will up a semaB to tell C to exit itself and do memory free. When P exit before C, we have implemented `parent` and `child_list` in every thread, and recursively point every child of P 's father to NULL, so they won't be affected by exited P and can exit by themself. **The exit of Parent won't affect their children.**
+> B7: Suppose a page fault in process P causes a page to be read from
+> the file system or swap.  How do you ensure that a second process Q
+> cannot interfere by e.g. attempting to evict the frame while it is
+> still being read in?
+
+//TODO: 
+
+> B8: Explain how you handle access to paged-out pages that occur
+> during system calls.  Do you use page faults to bring in pages (as
+> in user programs), or do you have a mechanism for "locking" frames
+> into physical memory, or do you use some other design?  How do you
+> gracefully handle attempted accesses to invalid virtual addresses?
+
+`exit(-1)`
 
 ---- RATIONALE ----
 
-> B9: Why did you choose to implement access to user memory from the
-> kernel in the way that you did?
+> B9: A single lock for the whole VM system would make
+> synchronization easy, but limit parallelism.  On the other hand,
+> using many locks complicates synchronization and raises the
+> possibility for deadlock but allows for high parallelism.  Explain
+> where your design falls along this continuum and why you chose to
+> design it this way.
 
-> 3.1.5 Accessing User Memory
+We use a single lock since pintos has limited support for parallelism.
 
-> As part of a system call, the kernel must often access memory through pointers provided by a user program. The kernel must be very careful about doing so, because the user can pass a null pointer, a pointer to unmapped virtual memory, or a pointer to kernel virtual address space (above PHYS_BASE). All of these types of invalid pointers must be rejected without harm to the kernel or other running processes, by terminating the offending process and freeing its resources.
-> There are at least two reasonable ways to do this correctly. The first method is to verify the validity of a user-provided pointer, then dereference it. If you choose this route, you'll want to look at the functions in userprog/pagedir.c and in threads/vaddr.h. This is the simplest way to handle user memory access.
-> The second method is to check only that a user pointer points below PHYS_BASE, then dereference it. An invalid user pointer will cause a "page fault" that you can handle by modifying the code for page_fault() in userprog/exception.c. This technique is normally faster because it takes advantage of the processor's MMU, so it tends to be used in real kernels (including Linux).
 
-For the args, we use something like ` syscall_read (*((int *) f->esp + 1), (void *) (*((int *) f->esp + 2)), *((unsigned *) f->esp + 3));` to read the arguments from the stack by converting the pointer to the stack to an integer, then dereferencing it.
+             MEMORY MAPPED FILES
+             ===================
 
-For the correctness, we choose the first method because it is simpler and it is the most straightforward.
+---- DATA STRUCTURES ----
 
-We check:
-1. if the user pointer is below PHYS_BASE 
-2. `user_vaddr` and `pagedir_get_page()`  and check the first and the last bit of the stack pointer. 
+> C1: Copy here the declaration of each new or changed `struct' or
+> `struct' member, global or static variable, `typedef', or
+> enumeration.  Identify the purpose of each in 25 words or less.
 
-> B10: What advantages or disadvantages can you see to your design
-> for file descriptors?
+It is the same as our answer to `A1`. But the following is important to MMAP, which records all the existing memory mapped files in `thread.h`
 
-Advabages: 
-- Simple and Naïve enough to implement, since it is increase and arrenge linearly.
+```C
+    struct list mmap_list;      // 保存这个进程所有的  memory map
+    mapid_t next_mapid;         // next map id
 
-Disadvantages:
-- The time complexity is O(n), where n is the number of files opened. In most file systems, it will be much faster by using a much sophisticated data structure. Usually, the file system is a hash table, or a tree, with special features to manage the file.
+    struct mmap_descriptor
+    {
+        struct list_elem elem;
+        mapid_t mapid;
+        struct file *file;
+        void *addr;
+        uint32_t file_size;
+        struct file_descriptor *fd;
+        bool dead;
+        int hack;
+    } mmap_descriptor;
+```
 
-> B11: The default tid_t to pid_t mapping is the identity mapping.
-> If you changed it, what advantages are there to your approach?
+---- ALGORITHMS ----
 
-We didn't change the mapping, because it is not necessary.
+> C2: Describe how memory mapped files integrate into your virtual
+> memory subsystem.  Explain how the page fault and eviction
+> processes differ between swap pages and other pages.
+
+When `syscall_mmap` is called, we will grab serveral pages from memory by `frame_get`, which establishes a map of physical memory and virtual memory. We will then store them (the frame of file properties) into `sup_page_table_entry` and new a `mmap_descriptor` object in the thread just as `file_descriptor` in Project 2.
+
+TODO: evict and page fault.
+
+> C3: Explain how you determine whether a new file mapping overlaps
+> any existing segment.
+
+Here's the code:
+```C
+  for (int i = 0; i < file_length (f->file); i += PGSIZE)
+    {
+      if (page_lookup (&thread_current ()->sup_page_table, addr + i) != NULL)
+        return -1;
+    }
+```
+
+Basiclly, we use `page_lookup` to find whether this part of virtual memory overlaps any existing virtual memory. We choose to do it before reading the file because it will be much complicated to handle if we detect overlaps during slicing file memories, which requires roll back operations.
+
+---- RATIONALE ----
+
+> C4: Mappings created with "mmap" have similar semantics to those of
+> data demand-paged from executables, except that "mmap" mappings are
+> written back to their original files, not to swap.  This implies
+> that much of their implementation can be shared.  Explain why your
+> implementation either does or does not share much of the code for
+> the two situations.
 
                SURVEY QUESTIONS
                ================
@@ -284,24 +396,14 @@ the quarter.
 > In your opinion, was this assignment, or any one of the three problems
 > in it, too easy or too hard?  Did it take too long or too little time?
 
-It do takes us a long time to implement this assignment, but it is not too hard. The effort was mainly spent on the debugging of argument passing and exec&wait, which cost us hours of time.
-
 > Did you find that working on a particular part of the assignment gave
 > you greater insight into some aspect of OS design?
-
-The implement of syscall helps us get a deep insight of context switch, since we got a stuck in it for a long time.
 
 > Is there some particular fact or hint we should give students in
 > future quarters to help them solve the problems?  Conversely, did you
 > find any of our guidance to be misleading?
 
-The guide implied that we can either use the origin project 1 code or use the code we implemented. In fact, use our code may enconter errors.
-
 > Do you have any suggestions for the TAs to more effectively assist
 > students, either for future quarters or the remaining projects?
 
-TAs and Professor are kind enough to give us some suggestions.
-
 > Any other comments?
-
-No，thanks.
