@@ -169,6 +169,7 @@ page_load (struct hash *spt, const void *vaddr, bool write, void *esp)
 
       if (write && !spte->writable)
         return false;
+      lock_acquire (&frame->lock);
       if (spte->swap_id != -1)
         {
           if (!page_load_swap (spte, frame->kpage))
@@ -179,6 +180,7 @@ page_load (struct hash *spt, const void *vaddr, bool write, void *esp)
           if (!page_load_file (spte, frame->kpage))
             return false;
         }
+      lock_release (&frame->lock);
     }
 
   if (!install_page (upage, frame->kpage, spte->writable))
