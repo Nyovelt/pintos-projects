@@ -1,8 +1,8 @@
             +---------------------------+
-            |          CS 140          |
-            | PROJECT 3: VIRTUAL MEMORY |
-            |      DESIGN DOCUMENT      |
-            +---------------------------+
+​            |          CS 140          |
+​            | PROJECT 3: VIRTUAL MEMORY |
+​            |      DESIGN DOCUMENT      |
+​            +---------------------------+
 
 ---- GROUP ----
 
@@ -104,14 +104,14 @@ And to look up pages in spt, since we are using `hash_table` to store supplement
 > kernel and user virtual addresses that alias a single frame, or
 > alternatively how do you avoid the issue?
 
-Kernel and User can only access to pages by our `page_load()`, and we have algorithms to avoid race.
+While manipulating these bits we check if the `owner ` of the `frame` is the current `thread`, thus we avoid this issue.
 
 ---- SYNCHRONIZATION ----
 
 > A4: When two user processes both need a new frame at the same time,
 > how are races avoided?
 
-We use `lock`.
+We incorporate locks into individual frames to coordinate on frames. So we implement pinning as well as block other threads from accessing the `frame`.
 
 ---- RATIONALE ----
 
@@ -140,7 +140,7 @@ struct sup_page_table_entry
 };
 ```
 
-We obtains a map of address and frame, and other properties. By mapping, we can give the corresponding frame to user/kernel when they need to visit it. By obtaining properties, we can handle more kinds of memory visit, such as file and swap. We choose it because it can record everything we need so that we can access to it if we need to do checking, it is friendly to programme.
+We obtain a map of an address, a frame and other information. By mapping, we can give the corresponding `frame` to `user`/`kernel` when they need to visit it. By bookkeeping, we can handle more kinds of memory visit, such as `file` and `swap`. We choose that structure because it can record everything we need and is convenient for quick checking, it is friendly for programming.
 
 
                PAGING TO AND FROM DISK
@@ -220,7 +220,7 @@ struct frame_table_entry
 > B2: When a frame is required but none is free, some frame must be
 > evicted.  Describe your code for choosing a frame to evict.
 
-时钟算法
+Clock algorithm
 ```C
 static void *
 frame_evict ()
@@ -309,7 +309,9 @@ the `frame_table_entry` records `  struct sup_page_table_entry *upage;`  and ` s
 > into physical memory, or do you use some other design?  How do you
 > gracefully handle attempted accesses to invalid virtual addresses?
 
-`exit(-1)`
+```
+exit(-1)
+```
 
 ---- RATIONALE ----
 
