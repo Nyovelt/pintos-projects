@@ -377,7 +377,7 @@ Here's the code:
 
 Basiclly, we use `page_lookup` to find whether this part of virtual memory overlaps any existing virtual memory. We choose to do it before reading the file because it will be much complicated to handle if we detect overlaps during slicing file memories, which requires roll back operations.
 
-We do not share this part of code because mmap write to file and swap write to memory.
+
 
 ---- RATIONALE ----
 
@@ -387,6 +387,8 @@ We do not share this part of code because mmap write to file and swap write to m
 > that much of their implementation can be shared.  Explain why your
 > implementation either does or does not share much of the code for
 > the two situations.
+
+We do not share this part of code because mmap write to file and swap write to memory.
 
                SURVEY QUESTIONS
                ================
