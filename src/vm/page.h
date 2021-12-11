@@ -29,6 +29,7 @@ struct sup_page_table_entry
 #endif /* vm/page.h */
 
 void page_init (struct hash *spt);
+void page_destroy (struct hash *spt);
 bool page_record (struct hash *spt, void *upage, bool writable,
                   struct file *file, off_t ofs, uint32_t read_bytes,
                   bool in_stack); // TODO: more args?

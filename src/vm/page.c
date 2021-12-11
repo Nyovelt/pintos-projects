@@ -7,6 +7,7 @@
 #include "threads/thread.h"
 #include "threads/malloc.h"
 #include "userprog/process.h"
+#include "userprog/pagedir.h"
 #include "vm/frame.h"
 #include "vm/swap.h"
 #include "filesys/file.h"
@@ -45,13 +46,37 @@ page_load_zero (struct sup_page_table_entry *spte, void *upage, void *kpage)
   spte->is_stack = true;
 }
 
+static void
+page_destroy_entry (struct hash_elem *e, void *aux UNUSED)
+{
+  //printf ("%d: page_destroy_entry\n", thread_tid());
+  struct sup_page_table_entry *spte
+      = hash_entry (e, struct sup_page_table_entry, hash_elem);
+  //printf("swap_id: %d\n", spte->swap_id);
+  if (spte->swap_id != -1)
+    {
+      //printf("%d: to free swap: %d\n", thread_tid(), spte->swap_id);
+      swap_free(spte->swap_id);
+    }
+  if (spte->frame)
+    {
+      //printf("%d: to free kpage: %p\n", thread_tid(), spte->frame->kpage);
+      //palloc_free_page(spte->frame->kpage);
+      //pagedir_clear_page(thread_current()->pagedir, spte->vaddr);
+      if (spte->frame->owner == thread_current())
+        frame_free(spte->frame);
+    }
+  free (spte);
+  //printf("%d: destroyed spte\n", thread_tid());
+}
+
 static bool
 page_load_swap (struct sup_page_table_entry *spte, void *kpage)
 {
-  //printf("begin swap in\n");
+  //printf("thread: %p, begin swap in\n", thread_current());
   if(!swap_in(spte->swap_id, kpage))
     return false;
-  //printf("swap complete\n");
+  //printf("thread: %d, swap in complete\n", thread_tid());
   return true;
 }
 
@@ -61,8 +86,9 @@ page_load_file (struct sup_page_table_entry *spte, void *kpage)
   if (file_read_at (spte->file, kpage, spte->file_size, spte->file_ofs)
       != (off_t) spte->file_size)
     {
+      //printf("failed load file\n");
       palloc_free_page(kpage);
-      frame_free (kpage);
+      //frame_free (kpage);
       return false; // fail in file_read_at
     }
 
@@ -75,6 +101,13 @@ void
 page_init (struct hash *spt)
 {
   hash_init (spt, spte_hash, spte_less, NULL);
+}
+
+void
+page_destroy (struct hash *spt)
+{
+  //printf("%d: destroy hash\n", thread_tid());
+  hash_destroy (spt, page_destroy_entry);
 }
 
 /* return the page which has the address */
@@ -106,6 +139,7 @@ page_record (struct hash *spt, void *upage, bool writable,
   if (spte == NULL)
     return false; // fail in malloc
   //printf("spte recorded: %p\n", upage);
+  spte->frame = NULL;
   spte->vaddr = upage;
   spte->writable = writable;
   spte->is_stack = in_stack;
@@ -133,7 +167,7 @@ page_load (struct hash *spt, const void *vaddr, bool write, void *esp)
   struct frame_table_entry *frame = frame_get (PAL_USER, spte);
   if (frame == NULL)
     return false;
-  //printf ("page_load - frame: %p, upage: %p\n", frame, upage);
+  //printf ("%d: page_load - frame: %p, upage: %p\n",thread_tid(), frame, upage);
 
   if (spte == NULL) //|| (spte->present && spte->swapped) || )
     {
@@ -183,7 +217,7 @@ page_load (struct hash *spt, const void *vaddr, bool write, void *esp)
 
   if (!install_page (upage, frame->kpage, spte->writable))
     {
-      printf("failed to install page %p", frame);
+      //printf("failed to install page %p", frame);
       palloc_free_page(frame->kpage);
       frame_free (frame);
       page_free (spt, spte);
@@ -229,6 +263,7 @@ page_print (struct hash *spt)
 {
   struct hash_iterator i;
   hash_first (&i, spt);
+  printf("========SUP_PAGE OF: %d========\n", thread_tid());
   while (hash_next (&i))
     {
       struct sup_page_table_entry *spte
@@ -240,8 +275,10 @@ page_print (struct hash *spt)
         {
           printf ("size: %d, offset: %d ", spte->file_size, spte->file_ofs);
         }
-
-      printf ("frame: %p\n", spte->frame);
+      if (spte->frame)
+        printf ("swap_id: %d, kpage: %p\n", spte->swap_id, spte->frame->kpage);
+      else
+        printf ("swap_id: %d, frame: %p\n", spte->swap_id, spte->frame);
 
       printf ("================================\n");
     }

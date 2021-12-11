@@ -578,7 +578,7 @@ syscall_munmap (mapid_t mapid)
         }
 
 
-      // frame_free (spte->frame); //FIXME: cannot work
+      frame_free (spte->frame); //FIXME: cannot work
       page_free (&thread_current ()->sup_page_table, i);
     }
   if (_mmap_descriptor->fd->mmaped > 1)

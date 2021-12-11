@@ -190,6 +190,11 @@ process_exit (void)
 {
   struct thread *cur = thread_current ();
 
+#ifdef VM
+  /* Destroy the current process's page table. */
+  //page_print (&cur->sup_page_table);
+#endif
+
   printf ("%s: exit(%d)\n", cur->name, cur->exit_code); // print exit code
   sema_up (&cur->sema_wait);
   cur->load_status = FINISHED;
@@ -204,6 +209,7 @@ process_exit (void)
   lock_release (&filesys_lock);
 
   // 在 exit 之前把所有 mmap_list 里的文件都写回去
+#ifdef VM
   lock_acquire (&filesys_lock);
 
   struct mmap_descriptor *_mmap_descriptor;
@@ -253,7 +259,26 @@ process_exit (void)
     }
 
   lock_release (&filesys_lock);
+#endif
 
+  /* Close all files and free resource */
+  //printf ("begin close file\n");
+  struct list_elem *to_del;
+  for (struct list_elem *e = list_begin (&cur->fd_list);
+       e != list_end (&cur->fd_list); e = to_del)
+    {
+      struct file_descriptor *f = list_entry (e, struct file_descriptor, elem);
+      lock_acquire (&filesys_lock);
+      file_close (f->file);
+      to_del = list_next (e);
+      free (f);
+      lock_release (&filesys_lock);
+    }
+
+#ifdef VM
+  /* Destroy the current process's page table. */
+  //page_destroy (&cur->sup_page_table);
+#endif
 
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
@@ -268,19 +293,6 @@ process_exit (void)
         t->parent = NULL;
     }
 
-  /* Close all files and free resource */
-  struct list_elem *to_del;
-  for (struct list_elem *e = list_begin (&cur->fd_list);
-       e != list_end (&cur->fd_list); e = to_del)
-    {
-      struct file_descriptor *f = list_entry (e, struct file_descriptor, elem);
-      lock_acquire (&filesys_lock);
-      file_close (f->file);
-      to_del = list_next (e);
-      free (f);
-      lock_release (&filesys_lock);
-    }
-
   pd = cur->pagedir;
   if (pd != NULL)
     {
@@ -291,6 +303,7 @@ process_exit (void)
          directory before destroying the process's page
          directory, or our active page directory will be one
          that's been freed (and cleared). */
+      //printf ("%d: begin free pagedir\n", thread_tid());
       cur->pagedir = NULL;
       pagedir_activate (NULL);
       pagedir_destroy (pd);
