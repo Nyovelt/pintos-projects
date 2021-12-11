@@ -377,6 +377,8 @@ Here's the code:
 
 Basiclly, we use `page_lookup` to find whether this part of virtual memory overlaps any existing virtual memory. We choose to do it before reading the file because it will be much complicated to handle if we detect overlaps during slicing file memories, which requires roll back operations.
 
+We do not share this part of code because mmap write to file and swap write to memory.
+
 ---- RATIONALE ----
 
 > C4: Mappings created with "mmap" have similar semantics to those of
