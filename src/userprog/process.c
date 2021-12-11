@@ -6,7 +6,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include "userprog/gdt.h"
-#include "userprog/pagedir.h"
 #include "userprog/tss.h"
 #include "filesys/directory.h"
 #include "filesys/file.h"
@@ -21,6 +20,7 @@
 #include "devices/timer.h"
 #ifdef VM
 #include "vm/page.h"
+#include "userprog/pagedir.h"
 #endif
 
 #define ARGS_LIMIT 128
@@ -217,12 +217,13 @@ process_exit (void)
        e != list_end (&thread_current ()->mmap_list); e = list_next (e))
     {
       _mmap_descriptor = list_entry (e, struct mmap_descriptor, elem);
-      for (int i = _mmap_descriptor->addr;
-           i < _mmap_descriptor->addr + _mmap_descriptor->file_size;
+      for (int i = (int) _mmap_descriptor->addr;
+           (unsigned) i
+           < (unsigned) _mmap_descriptor->addr + _mmap_descriptor->file_size;
            i += PGSIZE)
         {
           struct sup_page_table_entry *spte
-              = page_lookup (&thread_current ()->sup_page_table, i);
+              = page_lookup (&thread_current ()->sup_page_table, (void *) i);
 
           if (spte == NULL)
             {
@@ -250,7 +251,7 @@ process_exit (void)
                                : (i - (int) (_mmap_descriptor->addr)),
                            (i - (int) (_mmap_descriptor->addr)));
           //TODO: consider
-          // frame_free (spte->frame); //FIXME: cannot work
+          //frame_free (spte->frame); //FIXME: cannot work
           //page_free (&thread_current ()->sup_page_table, i);
         }
 
@@ -277,7 +278,7 @@ process_exit (void)
 
 #ifdef VM
   /* Destroy the current process's page table. */
-  //page_destroy (&cur->sup_page_table);
+  page_destroy (&cur->sup_page_table);
 #endif
 
   /* Destroy the current process's page directory and switch back
@@ -593,11 +594,10 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage, uint32_t read_bytes,
       size_t page_zero_bytes = PGSIZE - page_read_bytes;
 
 #ifdef VM
+      /* No accloc page, just record necessary information */
       if (!page_record (&thread_current ()->sup_page_table, upage, writable,
                         file, ofs, page_read_bytes, false))
-        {
-          return false;
-        }
+        return false;
       ofs += PGSIZE;
 #else
       /* Get a page of memory. */
@@ -620,13 +620,11 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage, uint32_t read_bytes,
           return false;
         }
 #endif
-
       /* Advance. */
       read_bytes -= page_read_bytes;
       zero_bytes -= page_zero_bytes;
       upage += PGSIZE;
     }
-  //page_print (&thread_current ()->sup_page_table);
   return true;
 }
 

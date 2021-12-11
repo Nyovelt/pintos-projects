@@ -11,18 +11,19 @@ struct sup_page_table_entry
 {
     struct hash_elem hash_elem;
     struct frame_table_entry *frame;
-    void *vaddr; // virtual address of the page
-    bool writable;     // is the page writable?
-    bool is_stack;        // is the page in user stack (or in .data/.text)?
+    void *vaddr;   // virtual address of the page
+    bool writable; // is the page writable?
+    bool is_stack; // is the page in user stack (or in .data/.text)?
 
     /* For swap */
     int swap_id;
 
-    /* For fole operations */
+    /* For file operations */
     struct file *file;
     off_t file_ofs;
     uint32_t file_size;
 
+    /* For mmap */
     unsigned hash;
 };
 

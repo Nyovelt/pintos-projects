@@ -7,19 +7,9 @@
 #include "vm/swap.h"
 #include <stdio.h>
 
-unsigned short lfsr = 0xACE1u;
-unsigned bit;
-static unsigned
-rand ()
-{
-  bit = ((lfsr >> 0) ^ (lfsr >> 2) ^ (lfsr >> 3) ^ (lfsr >> 5)) & 1;
-  return lfsr = (lfsr >> 1) | (bit << 15);
-}
-
 static struct hash frame_table;
 struct hash_iterator clock;
 static struct lock lock;
-//int try[10] = {0, 20, 44, 55, 66, 65, 68, 325, 65, 365};
 
 static unsigned
 frame_hash (const struct hash_elem *e, void *aux UNUSED)
@@ -43,33 +33,32 @@ frame_less (const struct hash_elem *a_, const struct hash_elem *b_,
 static void *
 frame_evict ()
 {
-  //printf ("Evicting: FTE:%p, KPAGE: %p\n", fte, fte->kpage);
-  int evict_num = rand () % (hash_size (&frame_table) - 2);
-  //printf ("evict_num: %d, total: %d\n", evict_num,
-          //hash_size (&frame_table) - 1);
+  struct frame_table_entry *fte = NULL;
+  struct hash_iterator clock;
   hash_first (&clock, &frame_table);
-  hash_next (&clock);
-  for (int i = 0; i < evict_num; i++)
-    hash_next (&clock);
+  while (hash_next (&clock))
+    {
+      fte = hash_entry (hash_cur (&clock), struct frame_table_entry, hash_elem);
+      if (!lock_held_by_current_thread (&fte->lock)
+          && !lock_try_acquire (&fte->lock))
+        continue;
 
-  struct frame_table_entry *fte
-      = hash_entry (hash_cur (&clock), struct frame_table_entry, hash_elem);
+      /* Check if used */
+      if (!fte->used)
+        break;
+      else
+        fte->used = 0;
+    }
 
   int index = swap_out (fte->kpage);
   if (index == -1)
-      {
-        //printf("swap slot failed\n");
-        return NULL;
-      }
-  //printf ("Evicted frame %p with upage %p INDEX: %d\n", fte->kpage,
-          //fte->upage->vaddr, index);
-  fte->upage->swap_id = index;
-  fte->upage->frame = NULL;
+    return NULL;
+
+  fte->upage->swap_id = index; // needed for reclaiming
+  fte->upage->frame = NULL;    // unmap upage
   void *ret = fte->kpage;
+  lock_release (&fte->lock);
   frame_clear (fte);
-  //printf ("evicted page %p\n", fte->kpage);
-  //lock_release (&lock);
-  //printf ("evicted page %p\n", fte->kpage);
   return ret;
 }
 
@@ -78,27 +67,15 @@ frame_init ()
 {
   hash_init (&frame_table, frame_hash, frame_less, NULL);
   lock_init (&lock);
-  /*hash_first (&clock, &frame_table);
-  hash_next (&clock);*/
 }
 
 struct frame_table_entry *
 frame_get (enum palloc_flags flags, struct sup_page_table_entry *upage)
 {
-  /* Validating the address */
-  /* Within 32 bytes of the stack pointer */
-  // if (!is_user_vaddr (upage) || !is_user_vaddr ((void *) upage + sizeof (void *) - 1))
-  //   return NULL;
-  lock_acquire (&lock);
   void *kpage = palloc_get_page (flags | PAL_ZERO);
+  /* Not enough frames, evict one */
   if (kpage == NULL)
-    {
-      kpage = frame_evict();
-      //printf("alloc again\n");
-      ASSERT (kpage != NULL)
-      //printf("new kpage: %p \n", frame);
-    }
-  //printf ("Allocated frame %p with upage %p\n", frame, upage->vaddr);
+    kpage = frame_evict ();
 
   struct frame_table_entry *fte = malloc (sizeof (struct frame_table_entry));
   if (fte == NULL)
@@ -115,8 +92,6 @@ frame_get (enum palloc_flags flags, struct sup_page_table_entry *upage)
   fte->used = 1;
   hash_insert (&frame_table, &fte->hash_elem);
   lock_init (&fte->lock);
-  lock_release (&lock);
-  //printf ("%d: Allocated frame %p for vaddr %p\n",thread_tid(), kpage, upage->vaddr);
   return fte;
 }
 
@@ -124,7 +99,7 @@ void
 frame_clear (struct frame_table_entry *fte)
 {
   hash_delete (&frame_table, &fte->hash_elem);
-  pagedir_clear_page(fte->owner->pagedir, fte->upage->vaddr);
+  pagedir_clear_page (fte->owner->pagedir, fte->upage->vaddr);
   free (fte);
 }
 
@@ -132,7 +107,7 @@ void
 frame_free (struct frame_table_entry *fte)
 {
   hash_delete (&frame_table, &fte->hash_elem);
-  palloc_free_page(fte->kpage);
+  palloc_free_page (fte->kpage);
   free (fte);
 }
 
@@ -140,5 +115,5 @@ void
 frame_destroy (struct frame_table_entry *fte)
 {
   hash_delete (&frame_table, &fte->hash_elem);
-  free(fte);
+  free (fte);
 }
