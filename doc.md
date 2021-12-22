@@ -39,12 +39,16 @@ Feiran Qin <qinfr@shanghaitech.edu.cn>
 > A3: Explain how your code avoids a race if two processes attempt to
 > extend a file at the same time.
 
+We will add a lock.
+
 > A4: Suppose processes A and B both have file F open, both
 > positioned at end-of-file.  If A reads and B writes F at the same
 > time, A may read all, part, or none of what B writes.  However, A
 > may not read data other than what B writes, e.g. if B writes
 > nonzero data, A is not allowed to see all zeros.  Explain how your
 > code avoids this race.
+
+We will use C.O.W, which make sure that A and B will read and write the same buffer. What's more, we will use semephor to ensure thread safety and avoid data race.(?)
 
 > A5: Explain how your synchronization design provides "fairness".
 > File access is "fair" if readers cannot indefinitely block writers
@@ -53,6 +57,8 @@ Feiran Qin <qinfr@shanghaitech.edu.cn>
 > processes writing to a file cannot prevent another process forever
 > from reading the file.
 
+The writers and readers will be wait in a queue. By FIFO, they will read or write it with fair.
+
 ---- RATIONALE ----
 
 > A6: Is your inode structure a multilevel index?  If so, why did you
@@ -60,6 +66,8 @@ Feiran Qin <qinfr@shanghaitech.edu.cn>
 > indirect blocks?  If not, why did you choose an alternative inode
 > structure, and what advantages and disadvantages does your
 > structure have, compared to a multilevel index?
+
+
 
                 SUBDIRECTORIES
                 ==============
