@@ -1,17 +1,17 @@
-             +--------------------------+
-             |          CS 140          |
-             | PROJECT 2: USER PROGRAMS |
-             |     DESIGN DOCUMENT      |
-             +--------------------------+
+             +-------------------------+
+             |         CS 140          |
+             | PROJECT 4: FILE SYSTEMS |
+             |     DESIGN DOCUMENT     |
+             +-------------------------+
 
----- GROUP 15 ----
+---- GROUP ----
 
 > Fill in the names and email addresses of your group members.
 
-Yining Zhang <zhangyn3@shanghaitech.edu.cn>
+Yining Zhang <zhangyn@shanghaitech.edu.cn>
 Feiran Qin <qinfr@shanghaitech.edu.cn>
 
-Yining Zhang did the project-setup and stack-setup, and did part of the system call, while Feiran Qin did the design of the functions involving the file descriptor. We did the `execute`, `exit` and `wait` together.
+
 
 ---- PRELIMINARIES ----
 
@@ -22,14 +22,8 @@ Yining Zhang did the project-setup and stack-setup, and did part of the system c
 > preparing your submission, other than the Pintos documentation, course
 > text, lecture notes, and course staff.
 
-Ref: 
-- [CS318 - Pintos
-Pintos source browser for JHU CS318 course
-](https://jhu-cs318.github.io/pintos-doxygen/html/index.html)
-
-
-               ARGUMENT PASSING
-               ================
+             INDEXED AND EXTENSIBLE FILES
+             ============================
 
 ---- DATA STRUCTURES ----
 
@@ -37,51 +31,46 @@ Pintos source browser for JHU CS318 course
 > `struct' member, global or static variable, `typedef', or
 > enumeration.  Identify the purpose of each in 25 words or less.
 
-No `struct` member, global or static variable, `typedef' or enumeration were introduced.
+> A2: What is the maximum size of a file supported by your inode
+> structure?  Show your work.
 
----- ALGORITHMS ----
+---- SYNCHRONIZATION ----
 
-> A2: Briefly describe how you implemented argument parsing.  How do
-> you arrange for the elements of argv[] to be in the right order?
-> How do you avoid overflowing the stack page?
+> A3: Explain how your code avoids a race if two processes attempt to
+> extend a file at the same time.
 
-```C
-  char *argv_[ARGS_LIMIT];
-  char *token, *save_ptr;
-  int argc = 0;
-  for (token = strtok_r (fn_copy, " ", &save_ptr);
-       token != NULL;
-       token = strtok_r (NULL, " ", &save_ptr))
-    argv_[argc++] = token;
-  argv_[argc] = NULL;
-```
+We will add a lock.
 
-We use the function  `strtok_r()`. If it meets the second argument, which is `"  "` in this case, it will split the string into tokens, and return the first token. Then it will save the pointer of the first token, and use it to split the next token. The process will continue until the string is empty. The last token will be NULL. 
+> A4: Suppose processes A and B both have file F open, both
+> positioned at end-of-file.  If A reads and B writes F at the same
+> time, A may read all, part, or none of what B writes.  However, A
+> may not read data other than what B writes, e.g. if B writes
+> nonzero data, A is not allowed to see all zeros.  Explain how your
+> code avoids this race.
 
-The point is that, for example, first argument is a = ABC0EF0GG, it will return a pointer, point to the a[0], and change a into ABC \0 EF0GG ,then point to a[5], and change a into ABC \0 EF \0 GG. 
+We will use C.O.W, which make sure that A and B will read and write the same buffer. What's more, we will use semephor to ensure thread safety and avoid data race.(?)
 
-Since `fn_copy` is creat by `palloc_get_page (0)`, it will exist until ` palloc_free_page (fn_copy);` is called. That will ensure the memory safe.
+> A5: Explain how your synchronization design provides "fairness".
+> File access is "fair" if readers cannot indefinitely block writers
+> or vice versa.  That is, many processes reading from a file cannot
+> prevent forever another process from writing the file, and many
+> processes writing to a file cannot prevent another process forever
+> from reading the file.
 
-And the document says that there has a ARGS_LIMIT of 128. `And palloc_get_page (0)` will return a page with size of 4096 bytes. So it won't overflow the stack page.
-
-Another way to avoid overflow is to use stack_push function, since stack is considerably larger, it has an advantage that  it will not be affected by ARGS_LIMIT. But it will be a little bit complicated. And our way also works fine.
+The writers and readers will be wait in a queue. By FIFO, they will read or write it with fair.
 
 ---- RATIONALE ----
 
-> A3: Why does Pintos implement strtok_r() but not strtok()?
-
-`strtok()` uses globa ldata thus is not thread safe, and `strtok_r()` is the thread-safe alternative.
-
-> A4: In Pintos, the kernel separates commands into a executable name
-> and arguments.  In Unix-like systems, the shell does this
-> separation.  Identify at least two advantages of the Unix approach.
-
-1. Pipeline
-2. The shell can be used to execute commands in a batch file.
+> A6: Is your inode structure a multilevel index?  If so, why did you
+> choose this particular combination of direct, indirect, and doubly
+> indirect blocks?  If not, why did you choose an alternative inode
+> structure, and what advantages and disadvantages does your
+> structure have, compared to a multilevel index?
 
 
-                 SYSTEM CALLS
-                 ============
+
+                SUBDIRECTORIES
+                ==============
 
 ---- DATA STRUCTURES ----
 
@@ -89,188 +78,59 @@ Another way to avoid overflow is to use stack_push function, since stack is cons
 > `struct' member, global or static variable, `typedef', or
 > enumeration.  Identify the purpose of each in 25 words or less.
 
-In `threads.h`
-
-```C
-/* Lock used to manipulate files across threads */
-struct lock file_lock;
-
-struct thread
-  {
-    ...
-#ifdef USERPROG
-    /* Owned by userprog/process.c. */
-    uint32_t *pagedir;                  /* Page directory. */
-    int exit_code;                      /* Exit code. */
-
-    int next_fd;
-    struct list fd_list;
-    struct file_descriptor
-    {
-      struct file *file;
-      int fd;
-      struct list_elem elem;
-    } file_descriptor_;               // record the list of opened files
-
-    /* begin exec */
-    struct list child_list;           // eist of child processes
-    struct list_elem child_elem;      // elements in the list of child processes
-    enum exec_status {
-      SUCCESS,
-      FAIL,
-      WAITING,
-      FINISHED
-    } load_status;                    // logging child process loads
-    struct semaphore sema_load;       // wait for a child process to finish loading
-    struct semaphore child_sema_load; // tell child processes to continue execution
-    struct semaphore sema_wait;       // wait for a child process to finish running
-    struct semaphore child_sema_wait; // tell child processes to continue to exit
-    int exit_status;                  // status code returned to the parent when exits
-    struct thread *parent;            // identify parent process
-    struct file *self;                // identify the execute file
-#endif
-  }
-```
-
-> B2: Describe how file descriptors are associated with open files.
-> Are file descriptors unique within the entire OS or just within a
-> single process?
-
-A file descriptor is a struct that holds a unique 'fd' and a pointer to the corresponding file, and for each process, the file descriptor is stored in a list of open files.
-
-File descriptors are unique just within a single process, because a file can be opened by different processes and has a separate file descriptor in each process
-
 ---- ALGORITHMS ----
 
-> B3: Describe your code for reading and writing user data from the
-> kernel.
-
-**Read:**
-
-First check if the memory pointed by buffer is valid, then get the `file_lock`. Then determine the input mode according to `fd`: if it is `STDIN`, read input from standard input. If it is not `STDIN` or `STDOUT`, find and open the file according to `fd` and call the system function `file_read` to read it. In case of errors or conditions other than those mentioned above, release the lock and return `-1`. If an error is returned or execution is complete, release the lock.
-
-**Write:**
-
-First check if the memory pointed by buffer is valid, then get the file_lock, and if `fd` is `STDIN`, call `putbuf` to print out the contents of the buffer. If it is not `STDIN` or `STDOUT`, find and open the file according to `fd` and call the system function `file_write` to read it.
-
-> B4: Suppose a system call causes a full page (4,096 bytes) of data
-> to be copied from user space into the kernel.  What is the least
-> and the greatest possible number of inspections of the page table
-> (e.g. calls to pagedir_get_page()) that might result?  What about
-> for a system call that only copies 2 bytes of data?  Is there room
-> for improvement in these numbers, and how much?
-
-If the size of the data is within the size of one page and greater than or equal to one byte, it will only be stored on one page of memory or on two pages. So the least possible number of inspections of the page table is 1 and the greatest is 2. The result is the same for the two-byte case. We can't think of any improvements at the moment.
-
-> B5: Briefly describe your implementation of the "wait" system call
-> and how it interacts with process termination.
-
-```C
-int
-process_wait (tid_t child_tid UNUSED)
-{
-  // dosomething
-  sema_down (&chd->sema_wait);
-  //do something
-  sema_up (&chd->child_sema_wait);
-  return exit_code;
-}
-```
-
-```C
-void
-process_exit (void)
-{
-  // do something
-  sema_up (&cur->sema_wait);
-  // do something
-  if (cur->parent != NULL)
-    sema_down (&cur->child_sema_wait);
-  // do something
-}
-```
-We use **two sema**, if P wait C befire C exit, the `process_wait()` function will down a semaA to wait for C to exit. If C exit before P wait, the `process_wait()` function will up a semaA to tell P that C exit. and down a semaB to wait for P to save the information such as `exit_code`. 
-
-> B6: Any access to user program memory at a user-specified address
-> can fail due to a bad pointer value.  Such accesses must cause the
-> process to be terminated.  System calls are fraught with such
-> accesses, e.g. a "write" system call requires reading the system
-> call number from the user stack, then each of the call's three
-> arguments, then an arbitrary amount of user memory, and any of
-> these can fail at any point.  This poses a design and
-> error-handling problem: how do you best avoid obscuring the primary
-> function of code in a morass of error-handling?  Furthermore, when
-> an error is detected, how do you ensure that all temporarily
-> allocated resources (locks, buffers, etc.) are freed?  In a few
-> paragraphs, describe the strategy or strategies you adopted for
-> managing these issues.  Give an example.
-
-For each address, we check the validity using the system-provided `is_user_vaddr` and `pagedir_get_page`. For each block of memory pointed by the pointer, we check the head and tail of the memory block using the above method. Based on the above method, for memory of known size, we check the first, last and each page. For strings, we check them one by one by traversing towards `\0`.
-
-For locks, we release the lock before returning the error code. For temporarily allocated resources, the resources allocated are released in `process_exit`. We just need to make sure that all errors are properly jumped and exited.
-
-For example, in `syscall_close`, we have some code shown below:
-```C
-if (f == NULL || f->fd == 0)
-  {
-    lock_release (&file_lock);
-    return -1;
-  }
-```
-After `return -1`, the lock is freed and the `eax` get the error code `-1` then the process exit with `-1`. Then in `process_exit`, the file descriptors accocated before are freed.
+> B2: Describe your code for traversing a user-specified path.  How
+> do traversals of absolute and relative paths differ?
 
 ---- SYNCHRONIZATION ----
 
-> B7: The "exec" system call returns -1 if loading the new executable
-> fails, so it cannot return before the new executable has completed
-> loading.  How does your code ensure this?  How is the load
-> success/failure status passed back to the thread that calls "exec"?
+> B4: How do you prevent races on directory entries?  For example,
+> only one of two simultaneous attempts to remove a single file
+> should succeed, as should only one of two simultaneous attempts to
+> create a file with the same name, and so on.
 
-We use **two sema**. One is for the parent process to wait for the child process to finish loading. The other is for the child process to wait for the parent process to finish loading. When the child process finishes loading, it will call `sema_up` on the `child_sema_load` semaphore. When the parent executing, it will first down the semaphore to wait for the child process to load. In the `load()` function, the child process will store whether it is sucess in the status of thread, which has status of SUCUCESS and FAIL. It is an Int variable in the structure of thread. 
-
-One problem we have met before is that the MAIN thread won't go through the `syscall_exec` and the program will stucked in the `start_process` function, since it is waiting for a sema never up. The solution is that let the `process_execute` to manage sema and entities other than `syscall_exec`.
-
-> B8: Consider parent process P with child process C.  How do you
-> ensure proper synchronization and avoid race conditions when P
-> calls wait(C) before C exits?  After C exits?  How do you ensure
-> that all resources are freed in each case?  How about when P
-> terminates without waiting, before C exits?  After C exits?  Are
-> there any special cases?
-
-We use **two sema**, if P wait C befire C exit, the `process_wait()` function will down a semaA to wait for C to exit. If C exit before P wait, the `process_wait()` function will up a semaA to tell P that C exit. and down a semaB to wait for P to save the information such as `exit_code`. If `process_wait()` is down, it will up a semaB to tell C to exit itself and do memory free. When P exit before C, we have implemented `parent` and `child_list` in every thread, and recursively point every child of P 's father to NULL, so they won't be affected by exited P and can exit by themself. **The exit of Parent won't affect their children.**
+> B5: Does your implementation allow a directory to be removed if it
+> is open by a process or if it is in use as a process's current
+> working directory?  If so, what happens to that process's future
+> file system operations?  If not, how do you prevent it?
 
 ---- RATIONALE ----
 
-> B9: Why did you choose to implement access to user memory from the
-> kernel in the way that you did?
+> B6: Explain why you chose to represent the current directory of a
+> process the way you did.
 
-> 3.1.5 Accessing User Memory
+                 BUFFER CACHE
+                 ============
 
-> As part of a system call, the kernel must often access memory through pointers provided by a user program. The kernel must be very careful about doing so, because the user can pass a null pointer, a pointer to unmapped virtual memory, or a pointer to kernel virtual address space (above PHYS_BASE). All of these types of invalid pointers must be rejected without harm to the kernel or other running processes, by terminating the offending process and freeing its resources.
-> There are at least two reasonable ways to do this correctly. The first method is to verify the validity of a user-provided pointer, then dereference it. If you choose this route, you'll want to look at the functions in userprog/pagedir.c and in threads/vaddr.h. This is the simplest way to handle user memory access.
-> The second method is to check only that a user pointer points below PHYS_BASE, then dereference it. An invalid user pointer will cause a "page fault" that you can handle by modifying the code for page_fault() in userprog/exception.c. This technique is normally faster because it takes advantage of the processor's MMU, so it tends to be used in real kernels (including Linux).
+---- DATA STRUCTURES ----
 
-For the args, we use something like ` syscall_read (*((int *) f->esp + 1), (void *) (*((int *) f->esp + 2)), *((unsigned *) f->esp + 3));` to read the arguments from the stack by converting the pointer to the stack to an integer, then dereferencing it.
+> C1: Copy here the declaration of each new or changed `struct' or
+> `struct' member, global or static variable, `typedef', or
+> enumeration.  Identify the purpose of each in 25 words or less.
 
-For the correctness, we choose the first method because it is simpler and it is the most straightforward.
+---- ALGORITHMS ----
 
-We check:
-1. if the user pointer is below PHYS_BASE 
-2. `user_vaddr` and `pagedir_get_page()`  and check the first and the last bit of the stack pointer. 
+> C2: Describe how your cache replacement algorithm chooses a cache
+> block to evict.
 
-> B10: What advantages or disadvantages can you see to your design
-> for file descriptors?
+> C3: Describe your implementation of write-behind.
 
-Advabages: 
-- Simple and Naïve enough to implement, since it is increase and arrenge linearly.
+> C4: Describe your implementation of read-ahead.
 
-Disadvantages:
-- The time complexity is O(n), where n is the number of files opened. In most file systems, it will be much faster by using a much sophisticated data structure. Usually, the file system is a hash table, or a tree, with special features to manage the file.
+---- SYNCHRONIZATION ----
 
-> B11: The default tid_t to pid_t mapping is the identity mapping.
-> If you changed it, what advantages are there to your approach?
+> C5: When one process is actively reading or writing data in a
+> buffer cache block, how are other processes prevented from evicting
+> that block?
 
-We didn't change the mapping, because it is not necessary.
+> C6: During the eviction of a block from the cache, how are other
+> processes prevented from attempting to access the block?
+
+---- RATIONALE ----
+
+> C7: Describe a file workload likely to benefit from buffer caching,
+> and workloads likely to benefit from read-ahead and write-behind.
 
                SURVEY QUESTIONS
                ================
@@ -284,24 +144,14 @@ the quarter.
 > In your opinion, was this assignment, or any one of the three problems
 > in it, too easy or too hard?  Did it take too long or too little time?
 
-It do takes us a long time to implement this assignment, but it is not too hard. The effort was mainly spent on the debugging of argument passing and exec&wait, which cost us hours of time.
-
 > Did you find that working on a particular part of the assignment gave
 > you greater insight into some aspect of OS design?
-
-The implement of syscall helps us get a deep insight of context switch, since we got a stuck in it for a long time.
 
 > Is there some particular fact or hint we should give students in
 > future quarters to help them solve the problems?  Conversely, did you
 > find any of our guidance to be misleading?
 
-The guide implied that we can either use the origin project 1 code or use the code we implemented. In fact, use our code may enconter errors.
-
 > Do you have any suggestions for the TAs to more effectively assist
-> students, either for future quarters or the remaining projects?
-
-TAs and Professor are kind enough to give us some suggestions.
+> students in future quarters?
 
 > Any other comments?
-
-No，thanks.
