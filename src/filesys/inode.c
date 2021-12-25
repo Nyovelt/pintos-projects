@@ -9,15 +9,20 @@
 
 /* Identifies an inode. */
 #define INODE_MAGIC 0x494e4f44
+#define NUM_DIRECT 124 // (512 - 2 * 4) / 4 (size of sector_t) - 2 entries (for indirect)
+#define PTRS_PER_SECTOR (BLOCK_SECTOR_SIZE / 4)
 
 /* On-disk inode.
    Must be exactly BLOCK_SECTOR_SIZE bytes long. */
 struct inode_disk
   {
-    block_sector_t start;               /* First data sector. */
+    block_sector_t direct[NUM_DIRECT];
+    block_sector_t indirect;
+    block_sector_t double_indirect;
+    //block_sector_t start;               /* First data sector. */
     off_t length;                       /* File size in bytes. */
     unsigned magic;                     /* Magic number. */
-    uint32_t unused[125];               /* Not used. */
+    //uint32_t unused[125];               /* Not used. */
   };
 
 /* Returns the number of sectors to allocate for an inode SIZE
