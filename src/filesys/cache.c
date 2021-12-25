@@ -3,6 +3,7 @@
 #include "devices/block.h"
 #include "threads/synch.h"
 #include "random.h"
+#include "filesys/filesys.h"
 #define BUF_SIZE 64
 
 struct cache_entry
@@ -12,8 +13,7 @@ struct cache_entry
     bool dirty;                 // for writing back
     bool used;                  // for clock algorithm
     uint8_t data[BLOCK_SECTOR_SIZE];
-    struct rwlock rwlock;    // per-entry R/W lock
-    struct block *fs_device; // 临时用的，用来连接到 inode 里的 fs_device
+    struct rwlock rwlock; // per-entry R/W lock
 };
 
 static struct cache_entry cache[BUF_SIZE]; // a statically alloc’d array of 64 blocks
@@ -30,7 +30,7 @@ cache_get ()
   int i
       = random_ulong () % BUF_SIZE;
   if (cache[i].dirty)
-    block_write (cache[i].fs_device, cache[i].sector, cache[i].data);
+    block_write (fs_device, cache[i].sector, cache[i].data);
   return cache + i;
 }
 
@@ -69,7 +69,6 @@ cache_write (struct block *block, block_sector_t sector, void *buffer)
       e->dirty = true;
       e->used = false;
       memcpy (e->data, buffer, BLOCK_SECTOR_SIZE);
-      e->fs_device = block;
     }
   else
     {
