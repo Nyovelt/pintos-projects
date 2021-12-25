@@ -34,6 +34,18 @@ cache_get ()
   return cache + i;
 }
 
+bool
+cache_close ()
+{
+  // 关闭缓存
+  for (int i = 0; i < BUF_SIZE; i++)
+    {
+      if (cache[i].dirty)
+        block_write (fs_device, cache[i].sector, cache[i].data), cache[i].dirty = false;
+    }
+  return true;
+}
+
 /* TODO: 
 1. 上锁 [Urgent]
 2. 完善哈希部分[Delayed]
