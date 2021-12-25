@@ -29,7 +29,7 @@ cache_get ()
   // 随机找一个倒霉蛋踢掉
   int i
       = random_ulong () % BUF_SIZE;
-  if (!cache[i].dirty)
+  if (cache[i].dirty)
     block_write (cache[i].fs_device, cache[i].sector, cache[i].data);
   return cache + i;
 }
