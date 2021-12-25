@@ -350,6 +350,7 @@ void rwlock_init(struct rwlock *rwlock)
 void rwlock_begin_read(struct rwlock *rwlock)
 {
   ASSERT (rwlock != NULL);
+
   lock_acquire(&rwlock->mutex);
   while (rwlock->writers > 0 || rwlock->writer_active)
     cond_wait(&rwlock->cond, &rwlock->mutex);
@@ -360,6 +361,7 @@ void rwlock_begin_read(struct rwlock *rwlock)
 void rwlock_end_read(struct rwlock *rwlock)
 {
   ASSERT (rwlock != NULL);
+
   lock_acquire(&rwlock->mutex);
   rwlock->readers--;
   if (rwlock->readers == 0)
@@ -370,6 +372,7 @@ void rwlock_end_read(struct rwlock *rwlock)
 void rwlock_begin_write(struct rwlock *rwlock)
 {
   ASSERT (rwlock != NULL);
+
   lock_acquire(&rwlock->mutex);
   rwlock->writers++;
   while (rwlock->readers > 0 || rwlock->writer_active)
@@ -382,8 +385,36 @@ void rwlock_begin_write(struct rwlock *rwlock)
 void rwlock_end_write(struct rwlock *rwlock)
 {
   ASSERT (rwlock != NULL);
+
   lock_acquire(&rwlock->mutex);
   rwlock->writer_active = false;
   cond_broadcast(&rwlock->cond, &rwlock->mutex);
   lock_release(&rwlock->mutex);
+}
+
+bool
+rwlock_try_write (struct rwlock *rwlock)
+{
+  ASSERT (rwlock != NULL);
+
+  if (lock_try_acquire (&rwlock->mutex))
+    {
+      if (rwlock->readers == 0 && rwlock->writer_active == false)
+        {
+          rwlock->writers++;
+          while (rwlock->readers > 0 || rwlock->writer_active)
+            cond_wait (&rwlock->cond, &rwlock->mutex);
+          rwlock->writers--;
+          rwlock->writer_active = true;
+          lock_release (&rwlock->mutex);
+          return true;
+        }
+      else
+        {
+          lock_release (&rwlock->mutex);
+          return false;
+        }
+    }
+  else
+    return false;
 }

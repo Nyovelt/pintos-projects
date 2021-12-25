@@ -1,9 +1,13 @@
 #include "filesys/cache.h"
+#include <debug.h>
+#include <stdio.h>
 #include <hash.h>
+#include <random.h>
+#include <string.h>
 #include "devices/block.h"
 #include "threads/synch.h"
-#include "random.h"
 #include "filesys/filesys.h"
+
 #define BUF_SIZE 64
 
 struct cache_entry
@@ -17,34 +21,14 @@ struct cache_entry
 };
 
 static struct cache_entry cache[BUF_SIZE]; // a statically alloc’d array of 64 blocks
+static int used_slots = 0;
 static struct hash sector_cache_map;       // a global mapping of sector ids to cache entries
-static struct lock hash_lock;              // A global lock to guard the hash-map
+static struct lock global_lock;            // A global lock to guard the hash-map
+static int clock_hand = 0;
+
 /* return a hash value of cache_entry e */
-
-
-// FIXME: this is a hack to get the cache to work. （随机的）
-struct cache_entry *
-cache_get ()
-{
-  // 随机找一个倒霉蛋踢掉
-  int i
-      = random_ulong () % BUF_SIZE;
-  if (cache[i].dirty)
-    block_write (fs_device, cache[i].sector, cache[i].data);
-  return cache + i;
-}
-
-bool
-cache_close ()
-{
-  // 关闭缓存
-  for (int i = 0; i < BUF_SIZE; i++)
-    {
-      if (cache[i].dirty)
-        block_write (fs_device, cache[i].sector, cache[i].data), cache[i].dirty = false;
-    }
-  return true;
-}
+static struct cache_entry *cache_find (const block_sector_t);
+static struct cache_entry *cache_insert (const block_sector_t);
 
 /* TODO: 
 1. 上锁 [Urgent]
@@ -52,57 +36,127 @@ cache_close ()
 3. 完善时钟算法[]
 */
 
+void
+cache_init ()
+{
+  lock_init (&global_lock);
+  for (int i = 0; i < BUF_SIZE; i++)
+  {
+    cache[i].sector = -1;
+    cache[i].dirty = false;
+    cache[i].used = false;
+    rwlock_init(&cache[i].rwlock);
+  }
+}
+
+void
+cache_writeback ()
+{
+  ASSERT (used_slots <= BUF_SIZE);
+  for (int i = 0; i < used_slots; i++)
+    {
+      if (cache[i].dirty)
+        {
+          block_write (fs_device, cache[i].sector, cache[i].data);
+          cache[i].dirty = false;
+        }
+    }
+}
+
+void
+cache_write_at (block_sector_t sector, const void *buffer, off_t offset, size_t bytes)
+{
+acquire:
+  lock_acquire (&global_lock);
+  struct cache_entry *ce = cache_find (sector);
+  lock_release (&global_lock);
+  if (ce == NULL)
+    ce = cache_insert (sector);
+  rwlock_begin_write (&ce->rwlock);
+  /* Verify that the cache entry still holds the block */
+  if (ce->sector != sector)
+    {
+     rwlock_end_write (&ce->rwlock);
+     goto acquire;
+    }
+
+  memcpy (ce->data + offset, buffer, bytes);
+  ce->dirty = true;
+  rwlock_end_write (&ce->rwlock);
+  }
+
+  void
+  cache_read_at (block_sector_t sector, void *buffer, off_t offset, size_t bytes)
+  {
+  acquire:
+    lock_acquire (&global_lock);
+    struct cache_entry *ce = cache_find (sector);
+    lock_release (&global_lock);
+    if (ce == NULL)
+      ce = cache_insert (sector);
+    rwlock_begin_read (&ce->rwlock);
+    /* Verify that the cache entry still holds the block */
+    if (ce->sector != sector)
+      {
+        rwlock_end_read (&ce->rwlock);
+        goto acquire;
+      }
+
+    memcpy (buffer, ce->data + offset, bytes);
+    rwlock_end_read (&ce->rwlock);
+  }
+
+/* return a hash value of cache_entry e */
 struct cache_entry *
 cache_find (const block_sector_t sector)
 {
-  for (int i = 0; i < BUF_SIZE; i++)
+  ASSERT (used_slots <= BUF_SIZE);
+  for (int i = 0; i < used_slots; i++)
     {
       if (cache[i].sector == sector)
         {
+          cache[i].used = true;
           return &cache[i];
         }
     }
   return NULL;
 }
 
-void
-cache_write (struct block *block, block_sector_t sector, void *buffer)
+// FIXME: this is a hack to get the cache to work. （随机的）
+struct cache_entry *
+cache_insert (block_sector_t sector)
 {
-  struct cache_entry *e;
-  e = cache_find (sector);
-  if (e == NULL)
+  struct cache_entry *ce = NULL;
+  lock_acquire (&global_lock);
+  if (used_slots < BUF_SIZE)
     {
-      /* 
-	  当前 sector 不在 cache 中，需要添加到 cache 中
-	  初始化，然后塞进去
-	  */
-      struct cache_entry *e = cache_get ();
-      e->sector = sector;
-      e->dirty = true;
-      e->used = false;
-      memcpy (e->data, buffer, BLOCK_SECTOR_SIZE);
+      ce = cache + used_slots++;
+      lock_release (&global_lock);
+      rwlock_begin_write (&ce->rwlock);
     }
   else
     {
-      memcpy (e->data, buffer, BLOCK_SECTOR_SIZE);
-      e->dirty = true;
+      ce = cache + clock_hand;
+      int cnt = 0;
+      while (ce->used || (cnt < BUF_SIZE && ce->dirty) || !rwlock_try_write (&ce->rwlock))
+        {
+          ce->used = false;
+          clock_hand++;
+          clock_hand %= BUF_SIZE;
+          ce = cache + clock_hand;
+          cnt++;
+        }
+      lock_release (&global_lock);
+      if (ce->dirty)
+        {
+          block_write (fs_device, ce->sector, ce->data);
+          ce->dirty = false;
+        }
     }
-}
 
-void
-cache_read (struct block *block, block_sector_t sector, void *buffer)
-{
-  struct cache_entry *e;
-  e = cache_find (sector);
-  if (e == NULL)
-    {
-      /* 如果要读的部分不在缓存中，那么就直接读内存 
-		 TODO: 其实应该加载到缓存中再读
-		 */
-      block_read (block, sector, buffer);
-    }
-  else
-    {
-      memcpy (buffer, e->data, BLOCK_SECTOR_SIZE);
-    }
+  ce->sector = sector;
+  ce->used = true;
+  block_read (fs_device, sector, ce->data);
+  rwlock_init (&ce->rwlock);
+  return ce;
 }

@@ -217,9 +217,6 @@ process_exit (void)
       lock_release (&file_lock);
     }
 
-  /* close all the inode cache */
-  close_all ();
-
   pd = cur->pagedir;
   if (pd != NULL)
     {
