@@ -40,11 +40,24 @@ cache_get ()
 3. 完善时钟算法
 */
 
+struct cache_entry *
+cache_find (const block_sector_t sector)
+{
+  for (int i = 0; i < BUF_SIZE; i++)
+    {
+      if (cache[i].sector == sector)
+        {
+          return &cache[i];
+        }
+    }
+  return NULL;
+}
+
 void
 cache_write (struct block *block, block_sector_t sector, void *buffer)
 {
   struct cache_entry *e;
-  e = hash_entry (hash_find (&sector_cache_map, &sector), struct cache_entry, hash_elem);
+  e = cache_find (sector);
   if (e == NULL)
     {
       /* 
@@ -69,7 +82,7 @@ void
 cache_read (struct block *block, block_sector_t sector, void *buffer)
 {
   struct cache_entry *e;
-  e = hash_entry (hash_find (&sector_cache_map, &sector), struct cache_entry, hash_elem);
+  e = cache_find (sector);
   if (e == NULL)
     {
       /* 如果要读的部分不在缓存中，那么就直接读内存 
