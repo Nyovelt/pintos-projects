@@ -35,9 +35,9 @@ cache_get ()
 }
 
 /* TODO: 
-1. 上锁
-2. 完善哈希部分
-3. 完善时钟算法
+1. 上锁 [Urgent]
+2. 完善哈希部分[Delayed]
+3. 完善时钟算法[]
 */
 
 struct cache_entry *
