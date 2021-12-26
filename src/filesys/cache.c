@@ -22,8 +22,8 @@ struct cache_entry
 
 static struct cache_entry cache[BUF_SIZE]; // a statically alloc’d array of 64 blocks
 static int used_slots = 0;
-static struct hash sector_cache_map;       // a global mapping of sector ids to cache entries
-static struct lock global_lock;            // A global lock to guard the hash-map
+static struct hash sector_cache_map; // a global mapping of sector ids to cache entries
+static struct lock global_lock;      // A global lock to guard the hash-map
 static int clock_hand = 0;
 
 /* return a hash value of cache_entry e */
@@ -41,12 +41,12 @@ cache_init ()
 {
   lock_init (&global_lock);
   for (int i = 0; i < BUF_SIZE; i++)
-  {
-    cache[i].sector = -1;
-    cache[i].dirty = false;
-    cache[i].used = false;
-    rwlock_init(&cache[i].rwlock);
-  }
+    {
+      cache[i].sector = -1;
+      cache[i].dirty = false;
+      cache[i].used = false;
+      rwlock_init (&cache[i].rwlock);
+    }
 }
 
 void
@@ -76,8 +76,8 @@ acquire:
   /* Verify that the cache entry still holds the block */
   if (ce->sector != sector)
     {
-     rwlock_end_write (&ce->rwlock);
-     goto acquire;
+      rwlock_end_write (&ce->rwlock);
+      goto acquire;
     }
 
   memcpy (ce->data + offset, buffer, bytes);
@@ -85,26 +85,26 @@ acquire:
   rwlock_end_write (&ce->rwlock);
   }
 
-  void
-  cache_read_at (block_sector_t sector, void *buffer, off_t offset, size_t bytes)
-  {
-  acquire:
-    lock_acquire (&global_lock);
-    struct cache_entry *ce = cache_find (sector);
-    lock_release (&global_lock);
-    if (ce == NULL)
-      ce = cache_insert (sector);
-    rwlock_begin_read (&ce->rwlock);
-    /* Verify that the cache entry still holds the block */
-    if (ce->sector != sector)
-      {
-        rwlock_end_read (&ce->rwlock);
-        goto acquire;
-      }
+void
+cache_read_at (block_sector_t sector, void *buffer, off_t offset, size_t bytes)
+{
+acquire:
+  lock_acquire (&global_lock);
+  struct cache_entry *ce = cache_find (sector);
+  lock_release (&global_lock);
+  if (ce == NULL)
+    ce = cache_insert (sector);
+  rwlock_begin_read (&ce->rwlock);
+  /* Verify that the cache entry still holds the block */
+  if (ce->sector != sector)
+    {
+      rwlock_end_read (&ce->rwlock);
+      goto acquire;
+    }
 
-    memcpy (buffer, ce->data + offset, bytes);
-    rwlock_end_read (&ce->rwlock);
-  }
+  memcpy (buffer, ce->data + offset, bytes);
+  rwlock_end_read (&ce->rwlock);
+}
 
 /* return a hash value of cache_entry e */
 struct cache_entry *
@@ -122,7 +122,6 @@ cache_find (const block_sector_t sector)
   return NULL;
 }
 
-// FIXME: this is a hack to get the cache to work. （随机的）
 struct cache_entry *
 cache_insert (block_sector_t sector)
 {
@@ -157,6 +156,6 @@ cache_insert (block_sector_t sector)
   ce->sector = sector;
   ce->used = true;
   block_read (fs_device, sector, ce->data);
-  rwlock_init (&ce->rwlock);
+  rwlock_end_write (&ce->rwlock);
   return ce;
 }
