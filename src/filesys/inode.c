@@ -17,13 +17,14 @@
    Must be exactly BLOCK_SECTOR_SIZE bytes long. */
 struct inode_disk
   {
-    block_sector_t direct[NUM_DIRECT];
-    block_sector_t indirect;
-    block_sector_t double_indirect;
-    //block_sector_t start;               /* First data sector. */
-    off_t length;                       /* File size in bytes. */
-    unsigned magic;                     /* Magic number. */
-    //uint32_t unused[125];               /* Not used. */
+      /* ext2-like design */
+      //block_sector_t direct[NUM_DIRECT];
+      //block_sector_t indirect;
+      //block_sector_t double_indirect;
+      block_sector_t start; /* First data sector. */
+      off_t length;         /* File size in bytes. */
+      unsigned magic;       /* Magic number. */
+      uint32_t unused[125]; /* Not used. */
   };
 
 /* Returns the number of sectors to allocate for an inode SIZE
@@ -42,7 +43,7 @@ struct inode
     int open_cnt;           /* Number of openers. */
     bool removed;           /* True if deleted, false otherwise. */
     int deny_write_cnt;     /* 0: writes ok, >0: deny writes. */
-    struct inode_disk data; /* Inode content. */
+    //struct inode_disk data; /* Inode content. */
 };
 
 /* Returns the block device sector that contains byte offset POS
@@ -53,8 +54,14 @@ static block_sector_t
 byte_to_sector (const struct inode *inode, off_t pos)
 {
   ASSERT (inode != NULL);
-  if (pos < inode->data.length)
-    return inode->data.start + pos / BLOCK_SECTOR_SIZE;
+
+  struct inode_disk *disk_inode = (struct inode_disk *) cache_access_begin (inode->sector);
+  off_t length = disk_inode->length;
+  block_sector_t start = disk_inode->start;
+  cache_access_end (inode->sector);
+
+  if (pos < length)
+    return start + pos / BLOCK_SECTOR_SIZE;
   else
     return -1;
 }
@@ -143,7 +150,7 @@ inode_open (block_sector_t sector)
   inode->open_cnt = 1;
   inode->deny_write_cnt = 0;
   inode->removed = false;
-  cache_read_block (inode->sector, &inode->data);
+  //cache_read_block (inode->sector, &inode->data);
   return inode;
 }
 
@@ -182,9 +189,14 @@ inode_close (struct inode *inode)
       /* Deallocate blocks if removed. */
       if (inode->removed)
         {
+          struct inode_disk *disk_inode = (struct inode_disk *) cache_access_begin (inode->sector);
+          off_t length = disk_inode->length;
+          block_sector_t start = disk_inode->start;
+          cache_access_end (inode->sector);
+
           free_map_release (inode->sector, 1);
-          free_map_release (inode->data.start,
-                            bytes_to_sectors (inode->data.length));
+          free_map_release (start,
+                            bytes_to_sectors (length));
         }
 
       free (inode);
@@ -351,5 +363,8 @@ inode_allow_write (struct inode *inode)
 off_t
 inode_length (const struct inode *inode)
 {
-  return inode->data.length;
+  struct inode_disk * disk_inode = (struct inode_disk *) cache_access_begin(inode->sector);
+  off_t length = disk_inode->length;
+  cache_access_end(inode->sector);
+  return length;
 }

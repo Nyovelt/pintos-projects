@@ -49,6 +49,38 @@ cache_init ()
     }
 }
 
+uint8_t *
+cache_access_begin (block_sector_t sector)
+{
+acquire:
+  lock_acquire (&global_lock);
+  struct cache_entry *ce = cache_find (sector);
+  lock_release (&global_lock);
+  if (ce == NULL)
+    ce = cache_insert (sector);
+  rwlock_begin_read (&ce->rwlock);
+  /* Verify that the cache entry still holds the block */
+  if (ce->sector != sector)
+    {
+      rwlock_end_read (&ce->rwlock);
+      goto acquire;
+    }
+
+  return ce->data;
+}
+
+void
+cache_access_end (block_sector_t sector)
+{
+  lock_acquire (&global_lock);
+  struct cache_entry *ce = cache_find (sector);
+  lock_release (&global_lock);
+
+  ASSERT(ce != NULL);
+  ASSERT(ce->sector == sector);
+  rwlock_end_read(&ce->rwlock);
+}
+
 void
 cache_writeback ()
 {

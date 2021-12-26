@@ -1,5 +1,3 @@
 .cache
-compile_commands.json
 .vscode/settings.json
-src/tests/userprog/
-
+compile_commands.json
