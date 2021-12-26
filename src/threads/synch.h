@@ -55,6 +55,7 @@ void rwlock_begin_read(struct rwlock *);
 void rwlock_end_read(struct rwlock *);
 void rwlock_begin_write(struct rwlock *);
 void rwlock_end_write(struct rwlock *);
+bool rwlock_try_write(struct rwlock *);
 
 /* Optimization barrier.
 

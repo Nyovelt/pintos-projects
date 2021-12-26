@@ -189,34 +189,34 @@ syscall_create (const char *file, unsigned initial_size)
 {
   if (strlen (file) == 0)
     return false;
-  lock_acquire (&file_lock);
+  //lock_acquire (&file_lock);
   bool ret = filesys_create (file, initial_size);
-  lock_release (&file_lock);
+  //lock_release (&file_lock);
   return ret;
 }
 
 static bool
 syscall_remove (const char *file)
 {
-  lock_acquire (&file_lock);
+  //lock_acquire (&file_lock);
   bool ret = filesys_remove (file);
-  lock_release (&file_lock);
+  //lock_release (&file_lock);
   return ret;
 }
 
 static int
 syscall_write (int fd, const void *buffer, unsigned size)
 {
-  lock_acquire (&file_lock);
+  //lock_acquire (&file_lock);
   if (fd == STDOUT_FILENO)
     {
       putbuf (buffer, size);
-      lock_release (&file_lock);
+      //lock_release (&file_lock);
       return size;
     }
   else if (fd == STDIN_FILENO)
     {
-      lock_release (&file_lock);
+      //lock_release (&file_lock);
       return -1;
     }
   else
@@ -224,14 +224,14 @@ syscall_write (int fd, const void *buffer, unsigned size)
       struct file_descriptor *f = get_file_descriptor (fd);
       if (f == NULL || f->fd == 0 || f->file == NULL)
         {
-          lock_release (&file_lock);
+          //lock_release (&file_lock);
           return -1;
         }
       int ret = file_write (f->file, buffer, size);
-      lock_release (&file_lock);
+      //lock_release (&file_lock);
       return ret;
     }
-  lock_release (&file_lock);
+  //lock_release (&file_lock);
   return -1;
 }
 
@@ -240,9 +240,9 @@ syscall_open (const char *file)
 {
   check_string (file);
 
-  lock_acquire (&file_lock);
+  //lock_acquire (&file_lock);
   struct file *f = filesys_open (file);
-  lock_release (&file_lock);
+  //lock_release (&file_lock);
 
   if (f == NULL)
     return -1;
@@ -260,13 +260,13 @@ static int
 syscall_close (int fd)
 {
   struct thread *t = thread_current ();
-  lock_acquire (&file_lock);
+  //lock_acquire (&file_lock);
   for (struct list_elem *e = list_begin (&t->fd_list); e != list_end (&t->fd_list); e = list_next (e))
     {
       struct file_descriptor *f = list_entry (e, struct file_descriptor, elem);
       if (f == NULL || f->fd == 0)
         {
-          lock_release (&file_lock);
+          //lock_release (&file_lock);
           return -1;
         }
       if (f->fd == fd)
@@ -274,23 +274,23 @@ syscall_close (int fd)
           list_remove (e);
           file_close (f->file);
           free (f);
-          lock_release (&file_lock);
+          //lock_release (&file_lock);
           return 0;
         }
     }
-  lock_release (&file_lock);
+  //lock_release (&file_lock);
   return -1;
 }
 
 static int
 syscall_read (int fd, void *buffer, unsigned size)
 {
-  lock_acquire (&file_lock);
+  //lock_acquire (&file_lock);
   if (fd == STDIN)
     {
       for (unsigned int i = 0; i < size; i++)
         *((char *) buffer + i) = input_getc ();
-      lock_release (&file_lock);
+      //lock_release (&file_lock);
       return size;
     }
   else if (fd != STDOUT)
@@ -298,58 +298,58 @@ syscall_read (int fd, void *buffer, unsigned size)
       struct file_descriptor *f = get_file_descriptor (fd);
       if (f == NULL || f->fd == 0 || f->file == NULL)
         {
-          lock_release (&file_lock);
+          //lock_release (&file_lock);
           return -1;
         }
       int bytes_read = file_read (f->file, buffer, size);
-      lock_release (&file_lock);
+      //lock_release (&file_lock);
       return bytes_read;
     }
-  lock_release (&file_lock);
+  //lock_release (&file_lock);
   return -1;
 }
 
 static int
 syscall_filesize (int fd)
 {
-  lock_acquire (&file_lock);
+  //lock_acquire (&file_lock);
   struct file_descriptor *f = get_file_descriptor (fd);
   if (f == NULL || f->fd == 0 || f->file == NULL)
     {
-      lock_release (&file_lock);
+      //lock_release (&file_lock);
       return -1;
     }
   int size = file_length (f->file);
-  lock_release (&file_lock);
+  //lock_release (&file_lock);
   return size;
 }
 
 void
 syscall_seek (int fd, unsigned position)
 {
-  lock_acquire (&file_lock);
+  //lock_acquire (&file_lock);
   struct file_descriptor *f = get_file_descriptor (fd);
   if (f == NULL || f->fd == 0 || f->file == NULL)
     {
-      lock_release (&file_lock);
+      //lock_release (&file_lock);
       return;
     }
   file_seek (f->file, position);
-  lock_release (&file_lock);
+  //lock_release (&file_lock);
 }
 
 static unsigned
 syscall_tell (int fd)
 {
-  lock_acquire (&file_lock);
+  //lock_acquire (&file_lock);
   struct file_descriptor *f = get_file_descriptor (fd);
   if (f == NULL || f->fd == 0 || f->file == NULL)
     {
-      lock_release (&file_lock);
+      //lock_release (&file_lock);
       return -1;
     }
   int pos = file_tell (f->file);
-  lock_release (&file_lock);
+  //lock_release (&file_lock);
   return pos;
 }
 
