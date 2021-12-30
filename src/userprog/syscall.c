@@ -407,7 +407,7 @@ syscall_chdir (const char *dir)
 static int
 syscall_mkdir (const char *dir)
 {
-  //printf ("Syscall: mkdir\n");
+  printf ("Syscall: mkdir\n");
   block_sector_t inode_sector = -1;
   bool success = false;
   struct dir *par_dir = NULL; // 父文件夹

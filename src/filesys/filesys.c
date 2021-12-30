@@ -109,6 +109,7 @@ do_format (void)
 bool
 parse_path (const char *path, char **par_path, char **name)
 {
+  printf ("%s:%d\n", __FILE__, __LINE__);
   struct inode *inode = NULL;
   char *token, *save_ptr;
   struct inode *prev_inode = NULL;
@@ -130,6 +131,7 @@ parse_path (const char *path, char **par_path, char **name)
       if (dir_lookup (*par_path, token, &inode) == false)
         {
           dir_close (*par_path);
+          printf ("%s:%d, false\n", __FILE__, __LINE__);
           return false;
         }
 
@@ -139,5 +141,6 @@ parse_path (const char *path, char **par_path, char **name)
       prev_inode = inode;
       *par_path = inode;
     }
+
   return true;
 }
