@@ -14,6 +14,7 @@
 #include "filesys/filesys.h"
 #include "filesys/file.h"
 #include "userprog/process.h"
+#include "devices/block.h"
 
 typedef int pid_t;
 #define STDIN 0
@@ -406,8 +407,24 @@ syscall_chdir (const char *dir)
 static int
 syscall_mkdir (const char *dir)
 {
-  printf ("Syscall: mkdir\n");
-  
+  //printf ("Syscall: mkdir\n");
+  block_sector_t inode_sector = -1;
+  bool success = false;
+  struct dir *par_dir = NULL; // 父文件夹
+  struct dir *new_dir = NULL; // 新文件夹
+  char *dir_name = NULL;      // 新文件夹名
+  char *dir_path = malloc (strlen (dir) + 1);
+  strlcpy (dir_path, dir, strlen (dir) + 1); // 复制文件夹名
+
+  //  验证文件名
+  if (parse_path (dir_path, &par_dir, &dir_name))
+    {
+      printf ("%s:%d,", __FILE__, __LINE__);
+      printf ("%s, %s\n", dir_path, dir_name);
+    }
+
+  free (dir_path);
+  return success;
 }
 
 static int
