@@ -35,7 +35,11 @@ static void syscall_seek (int fd, unsigned position);
 static unsigned syscall_tell (int fd);
 static pid_t syscall_exec (const char *cmd_line);
 static int syscall_wait (pid_t pid);
-
+static int syscall_chdir (const char *dir);
+static int syscall_mkdir (const char *dir);
+static int syscall_readdir (int fd, char name[READDIR_MAX_LEN + 1]);
+static int syscall_isdir (int fd);
+static int syscall_inumber (int fd);
 void
 syscall_init (void)
 {
@@ -165,6 +169,28 @@ syscall_handler (struct intr_frame *f UNUSED)
     case SYS_CLOSE:
       is_valid_ptr (f->esp, 1);
       f->eax = syscall_close (*((int *) f->esp + 1));
+      break;
+    case SYS_CHDIR:
+      is_valid_ptr (f->esp, 1);
+      check_string (*((const char **) f->esp + 1));
+      f->eax = syscall_chdir (*((const char **) f->esp + 1));
+      break;
+    case SYS_MKDIR:
+      is_valid_ptr (f->esp, 1);
+      check_string (*((const char **) f->esp + 1));
+      f->eax = syscall_mkdir (*((const char **) f->esp + 1));
+      break;
+    case SYS_READDIR:
+      is_valid_ptr (f->esp, 2);
+      f->eax = syscall_readdir (*((int *) f->esp + 1), (char *) (*((int *) f->esp + 2)));
+      break;
+    case SYS_ISDIR:
+      is_valid_ptr (f->esp, 1);
+      f->eax = syscall_isdir (*((int *) f->esp + 1));
+      break;
+    case SYS_INUMBER:
+      is_valid_ptr (f->esp, 1);
+      f->eax = syscall_inumber (*((int *) f->esp + 1));
       break;
     default:
       printf ("unknown syscall.\n");
@@ -370,4 +396,33 @@ syscall_wait (pid_t pid)
   if (pid == -1)
     return -1;
   return process_wait (pid);
+}
+
+static int
+syscall_chdir (const char *dir)
+{
+  printf ("Syscall: chdir\n");
+}
+static int
+syscall_mkdir (const char *dir)
+{
+  printf ("Syscall: mkdir\n");
+  
+}
+
+static int
+syscall_readdir (int fd, char name[READDIR_MAX_LEN + 1])
+{
+  printf ("Syscall: readdir\n");
+}
+
+static int
+syscall_isdir (int fd)
+{
+  printf ("Syscall: isdir\n");
+}
+static int
+syscall_inumber (int fd)
+{
+  printf ("Syscall: inumber\n");
 }
