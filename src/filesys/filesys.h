@@ -20,5 +20,4 @@ bool filesys_chdir (const char *path);
 bool filesys_mkdir (const char *path);
 
 bool parse_path (const char *path, char *directory, char *name);
-
 #endif /* filesys/filesys.h */

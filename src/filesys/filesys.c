@@ -52,11 +52,15 @@ filesys_create (const char *name, off_t initial_size)
   /* get filename and path */
   char *directory = (char *) malloc (sizeof (char) * (strlen (name) + 1));
   char *filename = (char *) malloc (sizeof (char) * (strlen (name) + 1));
+//  printf ("%s:%d, %s, %s, %s \n", __FILE__, __LINE__, name, directory, filename);
+
   if (!parse_path (name, directory, filename))
     {
       bool success = false;
       goto filesys_create_error;
     }
+
+  // printf ("%s:%d, %s, %s, %s \n", __FILE__, __LINE__, name, directory, filename);
   struct dir *dir = dir_open_path (directory);
   bool success = (dir != NULL
                   && free_map_allocate (1, &inode_sector)
@@ -66,6 +70,7 @@ filesys_create (const char *name, off_t initial_size)
     free_map_release (inode_sector, 1);
   dir_close (dir);
 filesys_create_error:
+  printf ("success: %d\n", success);
   free (directory);
   free (filename);
   return success;
@@ -81,7 +86,7 @@ filesys_open (const char *name)
 {
   // struct dir *dir = dir_open_path (directory);
   struct inode *inode = NULL;
-  printf ("%s:%d, %s\n", __FILE__, __LINE__, name);
+  // printf ("%s:%d, %s\n", __FILE__, __LINE__, name);
   char *directory = (char *) malloc (strlen (name) + 1);
   char *filename = (char *) malloc (strlen (name) + 1);
   if (!parse_path (name, directory, filename))
@@ -163,7 +168,7 @@ filesys_mkdir (const char *path)
       bool success = false;
       goto filesys_mkdir_error;
     }
-  printf ("%s:%d, %s, %s, %s \n", __FILE__, __LINE__, path, directory, filename);
+  //printf ("%s:%d, %s, %s, %s \n", __FILE__, __LINE__, path, directory, filename);
   struct dir *dir = dir_open_path (directory);
   block_sector_t inode_sector = 0;
   bool success = 1;
@@ -200,17 +205,20 @@ do_format (void)
 bool
 parse_path (const char *path, char *directory, char *name)
 {
+
   // printf ("%s:%d ", __FILE__, __LINE__);
   // printf ("%s\n", path);
   struct inode *inode = NULL;
   char *token, *save_ptr;
   struct inode *prev_inode = NULL;
+
   *name = "";
   char *ret = directory;
 
   if (strlen (path) == 0)
     return false;
-
+  char *path_copy = (char *) malloc (strlen (path) + 1);
+  memcpy (path_copy, path, strlen (path) + 1);
   if (path[0] == '/')
     {
       *directory = '/';
@@ -219,9 +227,19 @@ parse_path (const char *path, char *directory, char *name)
 
   //*directory = dir_open_root (); //TODO: 假设先从 root 开始， 后面再改进
   char *tmp = "";
-  for (char *token = strtok_r (path, "/", &save_ptr); token != NULL;
+  // int i = 0;
+  // printf ("%s:%d,%s,  %s \n", __FILE__, __LINE__, path_copy, token);
+  // // return 1;
+  // token = strtok_r (path_copy, "/", &save_ptr);
+  // printf ("%s:%d,%s,  %s, %s \n", __FILE__, __LINE__, path_copy, token, save_ptr);
+
+  // token = strtok_r (NULL, "/", &save_ptr);
+
+
+  for (token = strtok_r (path_copy, "/", &save_ptr); token != NULL;
        token = strtok_r (NULL, "/", &save_ptr))
     {
+
       if (directory && strlen (tmp) > 0)
         {
           memcpy (directory, tmp, strlen (tmp)); // 把上一次的路径加上去
@@ -230,9 +248,13 @@ parse_path (const char *path, char *directory, char *name)
         }
       tmp = token;
     }
+
   *directory = '\0';
 
   directory = ret;
+
   memcpy (name, tmp, strlen (tmp) + 1);
+  // printf ("%s:%d,%s,  %s \n", __FILE__, __LINE__, directory, name);
+  free (path_copy);
   return true;
 }
