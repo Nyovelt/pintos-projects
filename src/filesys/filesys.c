@@ -52,25 +52,25 @@ filesys_create (const char *name, off_t initial_size)
   /* get filename and path */
   char *directory = (char *) malloc (sizeof (char) * (strlen (name) + 1));
   char *filename = (char *) malloc (sizeof (char) * (strlen (name) + 1));
-//  printf ("%s:%d, %s, %s, %s \n", __FILE__, __LINE__, name, directory, filename);
 
+  bool success = false;
   if (!parse_path (name, directory, filename))
     {
-      bool success = false;
       goto filesys_create_error;
     }
 
-  // printf ("%s:%d, %s, %s, %s \n", __FILE__, __LINE__, name, directory, filename);
+
   struct dir *dir = dir_open_path (directory);
-  bool success = (dir != NULL
-                  && free_map_allocate (1, &inode_sector)
-                  && inode_create (inode_sector, initial_size)
-                  && dir_add (dir, filename, inode_sector));
+
+  success = (dir != NULL
+             && free_map_allocate (1, &inode_sector)
+             && inode_create (inode_sector, initial_size)
+             && dir_add (dir, filename, inode_sector));
   if (!success && inode_sector != 0)
     free_map_release (inode_sector, 1);
   dir_close (dir);
 filesys_create_error:
-  printf ("success: %d\n", success);
+  // printf ("success: %d\n", success);
   free (directory);
   free (filename);
   return success;
@@ -85,6 +85,7 @@ struct file *
 filesys_open (const char *name)
 {
   // struct dir *dir = dir_open_path (directory);
+
   struct inode *inode = NULL;
   // printf ("%s:%d, %s\n", __FILE__, __LINE__, name);
   char *directory = (char *) malloc (strlen (name) + 1);
@@ -96,20 +97,25 @@ filesys_open (const char *name)
       return NULL;
     }
 
-  // printf ("%s:%d, %s, %s, %s\n", __FILE__, __LINE__, name, directory, filename);
   struct dir *dir = dir_open_path (directory);
-  if (dir != NULL)
-    if (strlen (filename) > 0)
-      {
-        // 如果是文件
-        dir_lookup (dir, filename, &inode);
-        dir_close (dir);
-      }
-    else
-      {
-        // 如果是文件夹
-        inode = dir_get_inode (dir);
-      }
+  if (dir == NULL)
+    {
+      free (directory);
+      free (filename);
+      return NULL;
+    }
+
+  if (strlen (filename) > 0)
+    {
+      // 如果是文件
+      dir_lookup (dir, filename, &inode);
+      dir_close (dir);
+    }
+  else
+    {
+      // 如果是文件夹
+      inode = dir_get_inode (dir);
+    }
   if (inode == NULL || inode_is_removed (inode))
     {
       free (directory);
@@ -130,13 +136,14 @@ filesys_remove (const char *name)
 {
   char *directory = (char *) malloc (sizeof (char) * (strlen (name) + 1));
   char *filename = (char *) malloc (sizeof (char) * (strlen (name) + 1));
+  bool success = false;
   if (!parse_path (name, directory, filename))
     {
-      bool success = false;
+
       goto filesys_remove_error;
     }
   struct dir *dir = dir_open_path (directory);
-  bool success = dir != NULL && dir_remove (dir, filename);
+  success = dir != NULL && dir_remove (dir, filename);
   dir_close (dir);
 filesys_remove_error:
   free (directory);
@@ -163,29 +170,29 @@ filesys_mkdir (const char *path)
 {
   char *directory = (char *) malloc (sizeof (char) * (strlen (path) + 1));
   char *filename = (char *) malloc (sizeof (char) * (strlen (path) + 1));
+  bool success = false;
   if (!parse_path (path, directory, filename))
     {
-      bool success = false;
       goto filesys_mkdir_error;
     }
   //printf ("%s:%d, %s, %s, %s \n", __FILE__, __LINE__, path, directory, filename);
   struct dir *dir = dir_open_path (directory);
   block_sector_t inode_sector = 0;
-  bool success = 1;
   success = (dir != NULL && free_map_allocate (1, &inode_sector) && dir_create (inode_sector, 0) && inode_init_dir (inode_open (inode_sector), dir) && dir_add (dir, filename, inode_sector));
 
   if (!success && inode_sector != 0)
     free_map_release (inode_sector, 1);
   dir_close (dir);
 filesys_mkdir_error:
-  if (!success)
-    printf ("false\n");
-  else
-    {
-      printf ("success\n");
-    }
+  // if (!success)
+  //   printf ("false\n");
+  // else
+  //   {
+  //     printf ("success\n");
+  //   }
   free (directory);
   free (filename);
+  //printf ("success: %d\n", success);
   return success;
 }
 

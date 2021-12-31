@@ -13,6 +13,7 @@
 #include "devices/input.h"
 #include "filesys/filesys.h"
 #include "filesys/file.h"
+#include "filesys/inode.h"
 #include "userprog/process.h"
 #include "devices/block.h"
 
@@ -37,7 +38,7 @@ static unsigned syscall_tell (int fd);
 static pid_t syscall_exec (const char *cmd_line);
 static int syscall_wait (pid_t pid);
 static int syscall_chdir (const char *dir);
-static int syscall_mkdir (const char *dir);
+static bool syscall_mkdir (const char *dir);
 static int syscall_readdir (int fd, char name[READDIR_MAX_LEN + 1]);
 static int syscall_isdir (int fd);
 static int syscall_inumber (int fd);
@@ -216,7 +217,6 @@ syscall_create (const char *file, unsigned initial_size)
   if (strlen (file) == 0)
     return false;
   //lock_acquire (&file_lock);
-
   bool ret = filesys_create (file, initial_size);
   //lock_release (&file_lock);
   return ret;
@@ -249,7 +249,7 @@ syscall_write (int fd, const void *buffer, unsigned size)
   else
     {
       struct file_descriptor *f = get_file_descriptor (fd);
-      if (f == NULL || f->fd == 0 || f->file == NULL)
+      if (f == NULL || f->fd == 0 || f->file == NULL || inode_is_dir (file_get_inode (f->file)))
         {
           //lock_release (&file_lock);
           return -1;
@@ -411,51 +411,46 @@ syscall_wait (pid_t pid)
 static int
 syscall_chdir (const char *dir)
 {
-  printf ("Syscall: chdir\n");
+  // printf ("Syscall: chdir\n");
   check_string (dir);
   return filesys_chdir (dir);
 }
-static int
+static bool
 syscall_mkdir (const char *dir)
 {
-  printf ("Syscall: mkdir  ");
-  printf ("%s:%d, dir: %s \n", __FILE__, __LINE__, dir);
-  // return -1;
   bool ret = filesys_mkdir (dir);
-  return ret ? 1 : 0;
-
-  // block_sector_t inode_sector = -1;
-  // bool success = false;
-  // struct dir *par_dir = NULL; // 父文件夹
-  // struct dir *new_dir = NULL; // 新文件夹
-  // char *dir_name = NULL;      // 新文件夹名
-  // char *dir_path = malloc (strlen (dir) + 1);
-  // strlcpy (dir_path, dir, strlen (dir) + 1); // 复制文件夹名
-
-  // //  验证文件名
-  // if (parse_path (dir_path, par_dir, dir_name))
-  //   {
-  //     printf ("%s:%d,", __FILE__, __LINE__);
-  //     printf ("%s, %s\n", dir_path, dir_name);
-  //   }
-
-  // free (dir_path);
-  // return success;
+  return ret;
 }
 
 static int
 syscall_readdir (int fd, char name[READDIR_MAX_LEN + 1])
 {
-  printf ("Syscall: readdir\n");
+
+  struct file_descriptor *f = get_file_descriptor (fd);
+  if (f == NULL || f->fd == 0 || f->file == NULL)
+    return false;
+  struct inode *inode;
+  inode = file_get_inode (f->file);
+
+  if (inode == NULL || !inode_is_dir (inode))
+    return false;
+  bool ret = dir_readdir (f->dir, name);
+  return ret;
 }
 
 static int
 syscall_isdir (int fd)
 {
-  printf ("Syscall: isdir\n");
+  // printf ("Syscall: isdir\n");
+  struct file_descriptor *f = get_file_descriptor (fd);
+  if (f->file != NULL)
+    return inode_is_dir (file_get_inode (f->file));
+  return 0;
 }
 static int
 syscall_inumber (int fd)
 {
-  printf ("Syscall: inumber\n");
+  // printf ("Syscall: inumber\n");
+  struct file_descriptor *f = get_file_descriptor (fd);
+  return inode_get_inumber (file_get_inode (f->file));
 }

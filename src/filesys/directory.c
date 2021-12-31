@@ -35,7 +35,7 @@ struct dir *
 dir_open (struct inode *inode)
 {
   struct dir *dir = calloc (1, sizeof *dir);
-  if (inode != NULL && dir != NULL)
+  if (inode != NULL && dir != NULL && !inode_is_removed (inode))
     {
       dir->inode = inode;
       dir->pos = 0;
@@ -72,6 +72,11 @@ dir_open_path (const char *path)
   if (path[0] != '/')
     if (thread_current ()->cwd != NULL)
       dir = thread_current ()->cwd;
+  if (inode_is_removed (dir_get_inode (dir)))
+    {
+      free (path_copy);
+      return NULL;
+    }
 
   /* 递归的打开文件夹 */
   char *save_ptr;
@@ -102,6 +107,7 @@ dir_open_path (const char *path)
     }
 
   free (path_copy);
+
   return dir;
 }
 
@@ -274,11 +280,13 @@ dir_readdir (struct dir *dir, char name[NAME_MAX + 1])
   while (inode_read_at (dir->inode, &e, sizeof e, dir->pos) == sizeof e)
     {
       dir->pos += sizeof e;
-      if (e.in_use)
+      if (e.in_use && strcmp (e.name, ".") && strcmp (e.name, ".."))
         {
           strlcpy (name, e.name, NAME_MAX + 1);
+
           return true;
         }
     }
+
   return false;
 }

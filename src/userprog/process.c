@@ -44,7 +44,7 @@ process_execute (const char *file_name)
   if (fn_copy == NULL)
     return TID_ERROR;
 
-  lock_acquire (&file_lock);
+  //lock_acquire (&file_lock);
   strlcpy (fn_copy, file_name, PGSIZE);
 
   /* Parse the ﬁlename deliminating by white spaces */
@@ -68,7 +68,7 @@ process_execute (const char *file_name)
       struct thread *chd = get_thread_by_tid (tid);
       if (chd == NULL) // 如果进程不存在
         {
-          lock_release (&file_lock);
+          //lock_release (&file_lock);
           return -1;
         }
       sema_down (&(chd->sema_load)); // 等待进程加载完成
@@ -78,14 +78,14 @@ process_execute (const char *file_name)
         {
           // 失败
           sema_up (&(chd->child_sema_load));
-          lock_release (&file_lock);
+          //lock_release (&file_lock);
           return -1;
         }
       chd->parent = t; // I am your father, prepare to die.
       list_push_back (&thread_current ()->child_list, &chd->child_elem);
       sema_up (&(chd->child_sema_load));
     }
-  lock_release (&file_lock);
+  //lock_release (&file_lock);
   return tid;
 }
 
@@ -187,10 +187,10 @@ process_exit (void)
   sema_up (&cur->sema_wait);
   cur->load_status = FINISHED;
   uint32_t *pd;
-  lock_acquire (&file_lock);
+  //lock_acquire (&file_lock);
   if (cur->self != NULL)
     file_close (cur->self);
-  lock_release (&file_lock);
+  //lock_release (&file_lock);
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
   if (cur->parent != NULL)
@@ -210,11 +210,11 @@ process_exit (void)
   for (struct list_elem *e = list_begin (&cur->fd_list); e != list_end (&cur->fd_list); e = to_del)
     {
       struct file_descriptor *f = list_entry (e, struct file_descriptor, elem);
-      lock_acquire (&file_lock);
+      //lock_acquire (&file_lock);
       file_close (f->file);
       to_del = list_next (e);
       free (f);
-      lock_release (&file_lock);
+      //lock_release (&file_lock);
     }
 
   pd = cur->pagedir;
