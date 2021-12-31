@@ -21,8 +21,7 @@ typedef int pid_t;
 #define STDIN 0
 #define STDOUT 1
 
-static void
-syscall_handler (struct intr_frame *);
+static void syscall_handler (struct intr_frame *);
 
 static int syscall_open (const char *file);
 static int syscall_close (int fd);
@@ -51,7 +50,8 @@ syscall_init (void)
 static inline bool
 is_valid_addr (const void *addr)
 {
-  return is_user_vaddr (addr) && pagedir_get_page (thread_current ()->pagedir, addr);
+  return is_user_vaddr (addr)
+         && pagedir_get_page (thread_current ()->pagedir, addr);
 }
 
 static inline void
@@ -98,7 +98,8 @@ get_file_descriptor (int fd)
   struct thread *t = thread_current ();
   if (list_begin (&t->fd_list) == NULL)
     return NULL;
-  for (struct list_elem *e = list_begin (&t->fd_list); e != list_end (&t->fd_list); e = list_next (e))
+  for (struct list_elem *e = list_begin (&t->fd_list);
+       e != list_end (&t->fd_list); e = list_next (e))
     {
       struct file_descriptor *f = list_entry (e, struct file_descriptor, elem);
       if (f == NULL || f->fd == 0)
@@ -117,9 +118,7 @@ syscall_handler (struct intr_frame *f UNUSED)
 
   switch (*(int *) f->esp)
     {
-    case SYS_HALT:
-      syscall_halt ();
-      break;
+    case SYS_HALT: syscall_halt (); break;
     case SYS_EXIT:
       is_valid_ptr (f->esp, 1);
       syscall_exit (*((int *) f->esp + 1));
@@ -135,7 +134,8 @@ syscall_handler (struct intr_frame *f UNUSED)
     case SYS_CREATE:
       is_valid_ptr (f->esp, 2);
       check_string (*((const char **) f->esp + 1));
-      f->eax = syscall_create (*((const char **) f->esp + 1), *((unsigned *) f->esp + 2));
+      f->eax = syscall_create (*((const char **) f->esp + 1),
+                               *((unsigned *) f->esp + 2));
       break;
     case SYS_REMOVE:
       is_valid_ptr (f->esp, 1);
@@ -153,12 +153,15 @@ syscall_handler (struct intr_frame *f UNUSED)
     case SYS_READ:
       is_valid_ptr (f->esp, 3);
       check_memory (*((void **) f->esp + 2), *((unsigned *) f->esp + 3));
-      f->eax = syscall_read (*((int *) f->esp + 1), (void *) (*((int *) f->esp + 2)), *((unsigned *) f->esp + 3));
+      f->eax = syscall_read (*((int *) f->esp + 1),
+                             (void *) (*((int *) f->esp + 2)),
+                             *((unsigned *) f->esp + 3));
       break;
     case SYS_WRITE:
       is_valid_ptr (f->esp, 3);
       check_memory (*((void **) f->esp + 2), *((unsigned *) f->esp + 3));
-      f->eax = syscall_write (*((int *) f->esp + 1), (*((void **) f->esp + 2)), *((unsigned *) f->esp + 3));
+      f->eax = syscall_write (*((int *) f->esp + 1), (*((void **) f->esp + 2)),
+                              *((unsigned *) f->esp + 3));
       break;
     case SYS_SEEK:
       is_valid_ptr (f->esp, 2);
@@ -183,7 +186,8 @@ syscall_handler (struct intr_frame *f UNUSED)
       break;
     case SYS_READDIR:
       is_valid_ptr (f->esp, 2);
-      f->eax = syscall_readdir (*((int *) f->esp + 1), (char *) (*((int *) f->esp + 2)));
+      f->eax = syscall_readdir (*((int *) f->esp + 1),
+                                (char *) (*((int *) f->esp + 2)));
       break;
     case SYS_ISDIR:
       is_valid_ptr (f->esp, 1);
@@ -193,8 +197,7 @@ syscall_handler (struct intr_frame *f UNUSED)
       is_valid_ptr (f->esp, 1);
       f->eax = syscall_inumber (*((int *) f->esp + 1));
       break;
-    default:
-      printf ("unknown syscall.\n");
+    default: printf ("unknown syscall.\n");
     }
 }
 
@@ -249,7 +252,8 @@ syscall_write (int fd, const void *buffer, unsigned size)
   else
     {
       struct file_descriptor *f = get_file_descriptor (fd);
-      if (f == NULL || f->fd == 0 || f->file == NULL || inode_is_dir (file_get_inode (f->file)))
+      if (f == NULL || f->fd == 0 || f->file == NULL
+          || inode_is_dir (file_get_inode (f->file)))
         {
           //lock_release (&file_lock);
           return -1;
@@ -295,7 +299,8 @@ syscall_close (int fd)
 {
   struct thread *t = thread_current ();
   //lock_acquire (&file_lock);
-  for (struct list_elem *e = list_begin (&t->fd_list); e != list_end (&t->fd_list); e = list_next (e))
+  for (struct list_elem *e = list_begin (&t->fd_list);
+       e != list_end (&t->fd_list); e = list_next (e))
     {
       struct file_descriptor *f = list_entry (e, struct file_descriptor, elem);
       if (f == NULL || f->fd == 0)

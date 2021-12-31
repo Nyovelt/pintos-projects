@@ -243,12 +243,14 @@ inode_open (block_sector_t sector)
       if (inode->sector == sector)
         {
           inode_reopen (inode);
+          //printf ("%s:%d, Reopen inode %d\n", __FILE__, __LINE__, sector);
           return inode;
         }
     }
 
   /* Allocate memory. */
   inode = malloc (sizeof *inode);
+
   if (inode == NULL)
     return NULL;
 
@@ -258,6 +260,7 @@ inode_open (block_sector_t sector)
   inode->open_cnt = 1;
   inode->deny_write_cnt = 0;
   inode->removed = false;
+  inode->is_dir = false;
   lock_init (&inode->ext_lock);
   //cache_read_block (inode->sector, &inode->data);
   return inode;
@@ -651,6 +654,8 @@ inode_is_removed (struct inode *inode)
 bool
 inode_is_dir (struct inode *inode)
 {
+  if (inode->is_dir == NULL)
+    return false;
   return inode->is_dir;
 }
 

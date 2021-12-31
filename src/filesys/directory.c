@@ -74,6 +74,11 @@ dir_open_path (const char *path)
       {
         // /printf ("%s:%d: The CWD works\n", __FILE__, __LINE__);
         dir = dir_reopen (thread_current ()->cwd);
+        if (dir == NULL)
+          {
+            free (path_copy);
+            return NULL;
+          }
       }
   if (inode_is_removed (dir_get_inode (dir)))
     {
@@ -209,6 +214,16 @@ dir_add (struct dir *dir, const char *name, block_sector_t inode_sector)
   if (*name == '\0' || strlen (name) > NAME_MAX)
     return false;
 
+  for (ofs = 0; inode_read_at (dir->inode, &e, sizeof e, ofs) == sizeof e;
+       ofs += sizeof e)
+    {
+      if (strcmp (e.name, name) == 0)
+        {
+          success = false;
+          goto done;
+        }
+    }
+
   /* Set OFS to offset of free slot.
      If there are no free slots, then it will be set to the
      current end-of-file.
@@ -218,9 +233,10 @@ dir_add (struct dir *dir, const char *name, block_sector_t inode_sector)
      read due to something intermittent such as low memory. */
   for (ofs = 0; inode_read_at (dir->inode, &e, sizeof e, ofs) == sizeof e;
        ofs += sizeof e)
-    if (!e.in_use)
-      break;
-
+    {
+      if (!e.in_use)
+        break;
+    }
   /* Write slot. */
   e.in_use = true;
   strlcpy (e.name, name, sizeof e.name);

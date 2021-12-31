@@ -61,7 +61,7 @@ filesys_create (const char *name, off_t initial_size)
 
 
   struct dir *dir = dir_open_path (directory);
-
+  
   success = (dir != NULL && free_map_allocate (1, &inode_sector)
              && inode_create (inode_sector, initial_size)
              && dir_add (dir, filename, inode_sector));
