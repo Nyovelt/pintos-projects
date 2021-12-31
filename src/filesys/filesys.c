@@ -113,11 +113,15 @@ do_format (void)
 bool
 parse_path (const char *path, char *directory, char *name)
 {
-  printf ("%s:%d\n", __FILE__, __LINE__);
+  //printf ("%s:%d\n", __FILE__, __LINE__);
   struct inode *inode = NULL;
   char *token, *save_ptr;
   struct inode *prev_inode = NULL;
   *name = "";
+
+
+  if (strlen (path) == 0)
+    return false;
 
   if (path[0] == "/")
     {
@@ -125,7 +129,7 @@ parse_path (const char *path, char *directory, char *name)
       directory++;
     }
 
-  *directory = dir_open_root (); //TODO: 假设先从 root 开始， 后面再改进
+  //*directory = dir_open_root (); //TODO: 假设先从 root 开始， 后面再改进
   char *tmp = "";
   for (char *token = strtok_r (path, "/", &save_ptr); token != NULL;
        token = strtok_r (NULL, "/", &save_ptr))
