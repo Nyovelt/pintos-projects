@@ -18,6 +18,6 @@ struct file *filesys_open (const char *name);
 bool filesys_remove (const char *name);
 
 
-bool parse_path (const char *path, char **par_path, char **name);
+bool parse_path (const char *path, char *directory, char *name);
 
 #endif /* filesys/filesys.h */

@@ -49,6 +49,10 @@ bool
 filesys_create (const char *name, off_t initial_size)
 {
   block_sector_t inode_sector = 0;
+  /* get filename and path */
+  char *directory = (char *) malloc (sizeof (char) * (strlen (name) + 1));
+  char *filename = (char *) malloc (sizeof (char) * (strlen (name) + 1));
+  parse_path (name, directory, filename);
   struct dir *dir = dir_open_root ();
   bool success = (dir != NULL
                   && free_map_allocate (1, &inode_sector)
@@ -107,7 +111,7 @@ do_format (void)
 
 /* 首先从 root 一层层进行递归， 通过 strtok 来不断的拆文件夹名 */
 bool
-parse_path (const char *path, char **par_path, char **name)
+parse_path (const char *path, char *directory, char *name)
 {
   printf ("%s:%d\n", __FILE__, __LINE__);
   struct inode *inode = NULL;
@@ -115,32 +119,26 @@ parse_path (const char *path, char **par_path, char **name)
   struct inode *prev_inode = NULL;
   *name = "";
 
-  // if (strcmp (path, "/") == 0)
-  //   {
-  //     strcpy (par_path, "/");
-  //     return true;
-  //   }
-
-  *par_path = dir_open_root (); //TODO: 假设先从 root 开始， 后面再改进
-
-  for (token = strtok_r (path, "/", &save_ptr); token != NULL; token = strtok_r (NULL, "/", &save_ptr))
+  if (path[0] == "/")
     {
-      if (strcmp (token, "") == 0)
-        continue;
-
-      if (dir_lookup (*par_path, token, &inode) == false)
-        {
-          dir_close (*par_path);
-          printf ("%s:%d, false\n", __FILE__, __LINE__);
-          return false;
-        }
-
-      if (prev_inode != NULL)
-        inode_close (prev_inode);
-
-      prev_inode = inode;
-      *par_path = inode;
+      *directory = "/";
+      directory++;
     }
 
+  *directory = dir_open_root (); //TODO: 假设先从 root 开始， 后面再改进
+  char *tmp = "";
+  for (char *token = strtok_r (path, "/", &save_ptr); token != NULL;
+       token = strtok_r (NULL, "/", &save_ptr))
+    {
+      if (directory && strlen (tmp) > 0)
+        {
+          memcpy (directory, tmp, strlen (tmp)); // 把上一次的路径加上去
+          directory[strlen (tmp)] = '/';
+          directory += strlen (tmp) + 1;
+        }
+      tmp = token;
+    }
+  *directory = "\0";
+  memcpy (name, tmp, strlen (tmp) + 1);
   return true;
 }

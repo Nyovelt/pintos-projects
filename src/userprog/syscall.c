@@ -273,7 +273,7 @@ syscall_open (const char *file)
 
   if (f == NULL)
     return -1;
-
+  
   struct thread *t = thread_current ();
   struct file_descriptor *fd = malloc (sizeof (struct file_descriptor));
   fd->file = f;
@@ -417,7 +417,7 @@ syscall_mkdir (const char *dir)
   strlcpy (dir_path, dir, strlen (dir) + 1); // 复制文件夹名
 
   //  验证文件名
-  if (parse_path (dir_path, &par_dir, &dir_name))
+  if (parse_path (dir_path, par_dir, dir_name))
     {
       printf ("%s:%d,", __FILE__, __LINE__);
       printf ("%s, %s\n", dir_path, dir_name);
