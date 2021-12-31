@@ -1,3 +1,4 @@
 .cache
 .vscode/settings.json
 compile_commands.json
+.clang-format

@@ -71,7 +71,10 @@ dir_open_path (const char *path)
   struct dir *dir = dir_open_root ();
   if (path[0] != '/')
     if (thread_current ()->cwd != NULL)
-      dir = thread_current ()->cwd;
+      {
+        // /printf ("%s:%d: The CWD works\n", __FILE__, __LINE__);
+        dir = dir_reopen (thread_current ()->cwd);
+      }
   if (inode_is_removed (dir_get_inode (dir)))
     {
       free (path_copy);
@@ -80,7 +83,8 @@ dir_open_path (const char *path)
 
   /* 递归的打开文件夹 */
   char *save_ptr;
-  for (char *token = strtok_r (path_copy, "/", &save_ptr); token != NULL; token = strtok_r (NULL, "/", &save_ptr))
+  for (char *token = strtok_r (path_copy, "/", &save_ptr); token != NULL;
+       token = strtok_r (NULL, "/", &save_ptr))
     {
       struct die *chd_dir = NULL;
       struct inode *inode = NULL;
@@ -143,8 +147,8 @@ dir_get_inode (struct dir *dir)
    directory entry if OFSP is non-null.
    otherwise, returns false and ignores EP and OFSP. */
 static bool
-lookup (const struct dir *dir, const char *name,
-        struct dir_entry *ep, off_t *ofsp)
+lookup (const struct dir *dir, const char *name, struct dir_entry *ep,
+        off_t *ofsp)
 {
   struct dir_entry e;
   size_t ofs;
@@ -170,8 +174,7 @@ lookup (const struct dir *dir, const char *name,
    On success, sets *INODE to an inode for the file, otherwise to
    a null pointer.  The caller must close *INODE. */
 bool
-dir_lookup (const struct dir *dir, const char *name,
-            struct inode **inode)
+dir_lookup (const struct dir *dir, const char *name, struct inode **inode)
 {
   struct dir_entry e;
 
@@ -205,10 +208,6 @@ dir_add (struct dir *dir, const char *name, block_sector_t inode_sector)
   /* Check NAME for validity. */
   if (*name == '\0' || strlen (name) > NAME_MAX)
     return false;
-
-  /* Check that NAME is not in use. */
-  if (lookup (dir, name, NULL, NULL))
-    goto done;
 
   /* Set OFS to offset of free slot.
      If there are no free slots, then it will be set to the
@@ -254,6 +253,26 @@ dir_remove (struct dir *dir, const char *name)
   inode = inode_open (e.inode_sector);
   if (inode == NULL)
     goto done;
+
+  // 不能关掉正在用的文件夹
+  if (inode_is_dir (inode))
+    {
+      bool empty = true;
+      off_t ofs = sizeof (e);
+      struct dir *dir = dir_open (inode);
+      while (inode_read_at (dir->inode, &e, sizeof (e), ofs) == sizeof (e))
+        {
+          if (e.in_use && strcmp (e.name, ".") && strcmp (e.name, ".."))
+            {
+              empty = false;
+              break;
+            }
+          ofs += sizeof (e);
+        }
+      if (!empty)
+        goto done;
+    }
+
 
   /* Erase directory entry. */
   e.in_use = false;
