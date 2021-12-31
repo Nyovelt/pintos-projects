@@ -9,6 +9,7 @@
 #include "filesys/filesys.h"
 #include "filesys/free-map.h"
 #include "stdbool.h"
+#include "filesys/directory.h"
 
 /* Identifies an inode. */
 #define INODE_MAGIC 0x494e4f44
@@ -47,13 +48,14 @@ bytes_to_sectors (off_t size)
 /* In-memory inode. */
 struct inode
 {
-    struct list_elem elem;  /* Element in inode list. */
-    block_sector_t sector;  /* Sector number of disk location. */
-    int open_cnt;           /* Number of openers. */
-    bool removed;           /* True if deleted, false otherwise. */
-    int deny_write_cnt;     /* 0: writes ok, >0: deny writes. */
-    struct lock ext_lock;   /* For file extenstion */
-                            //struct inode_disk data; /* Inode content. */
+    struct list_elem elem; /* Element in inode list. */
+    block_sector_t sector; /* Sector number of disk location. */
+    int open_cnt;          /* Number of openers. */
+    bool removed;          /* True if deleted, false otherwise. */
+    int deny_write_cnt;    /* 0: writes ok, >0: deny writes. */
+    struct lock ext_lock;  /* For file extenstion */
+    //struct inode_disk data; /* Inode content. */
+    bool is_dir;
 };
 
 static bool allocate_direct (off_t, block_sector_t *);
@@ -342,7 +344,7 @@ inode_read_at (struct inode *inode, void *buffer_, off_t size, off_t offset)
       if (chunk_size <= 0)
         break;
 
-      cache_read_at(sector_idx, buffer + bytes_read, sector_ofs, chunk_size);
+      cache_read_at (sector_idx, buffer + bytes_read, sector_ofs, chunk_size);
 
       /*if (sector_ofs == 0 && chunk_size == BLOCK_SECTOR_SIZE)
         {
@@ -492,9 +494,9 @@ inode_allow_write (struct inode *inode)
 off_t
 inode_length (const struct inode *inode)
 {
-  struct inode_disk * disk_inode = (struct inode_disk *) cache_access_begin(inode->sector);
+  struct inode_disk *disk_inode = (struct inode_disk *) cache_access_begin (inode->sector);
   off_t length = disk_inode->length;
-  cache_access_end(inode->sector);
+  cache_access_end (inode->sector);
 
   return length;
 }
@@ -615,4 +617,35 @@ release_double_indirect (block_sector_t double_indirect, off_t num_double_indire
 
   cache_access_end (double_indirect);
   free_map_release (double_indirect, 1);
+}
+
+bool
+inode_is_removed (struct inode *inode)
+{
+  return inode->removed;
+}
+
+bool
+inode_is_dir (struct inode *inode)
+{
+  return inode->is_dir;
+}
+
+bool
+inode_init_dir (struct inode *inode, struct dir *par_dir)
+{
+  inode->is_dir = true;
+  struct dir *dir = dir_open (inode);
+  bool success = dir_add (dir, ".", inode_get_inumber (inode));
+  if (inode_get_inumber (inode) == ROOT_DIR_SECTOR)
+    {
+      // .. is to self thus
+      success = dir_add (dir, "..", inode_get_inumber (inode));
+    }
+  else
+    {
+      success = dir_add (dir, "..", inode_get_inumber (dir_get_inode (par_dir)));
+    }
+  dir_close (dir);
+  return success;
 }

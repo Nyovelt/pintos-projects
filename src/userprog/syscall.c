@@ -178,7 +178,6 @@ syscall_handler (struct intr_frame *f UNUSED)
       break;
     case SYS_MKDIR:
       is_valid_ptr (f->esp, 1);
-      check_string (*((const char **) f->esp + 1));
       f->eax = syscall_mkdir (*((const char **) f->esp + 1));
       break;
     case SYS_READDIR:
@@ -280,6 +279,13 @@ syscall_open (const char *file)
   fd->fd = t->next_fd++;
   list_push_back (&t->fd_list, &fd->elem);
   //TODO: fd record self's par dir? (convienient for dir operation)
+  struct inode *inode = file_get_inode (fd->file);
+  if (inode != NULL && inode_is_dir (inode))
+    {
+      fd->dir = dir_open (inode_reopen (inode));
+    }
+  else
+    fd->dir = NULL;
   return fd->fd;
 }
 
@@ -300,6 +306,8 @@ syscall_close (int fd)
         {
           list_remove (e);
           file_close (f->file);
+          if (f->dir)
+            dir_close (f->dir);
           free (f);
           //lock_release (&file_lock);
           return 0;
@@ -403,28 +411,35 @@ static int
 syscall_chdir (const char *dir)
 {
   printf ("Syscall: chdir\n");
+  check_string (dir);
+  return filesys_chdir (dir);
 }
 static int
 syscall_mkdir (const char *dir)
 {
-  printf ("Syscall: mkdir\n");
-  block_sector_t inode_sector = -1;
-  bool success = false;
-  struct dir *par_dir = NULL; // 父文件夹
-  struct dir *new_dir = NULL; // 新文件夹
-  char *dir_name = NULL;      // 新文件夹名
-  char *dir_path = malloc (strlen (dir) + 1);
-  strlcpy (dir_path, dir, strlen (dir) + 1); // 复制文件夹名
+  printf ("Syscall: mkdir  ");
+  printf ("%s:%d, dir: %s \n", __FILE__, __LINE__, dir);
+  // return -1;
+  bool ret = filesys_mkdir (dir);
+  return ret ? 1 : 0;
 
-  //  验证文件名
-  if (parse_path (dir_path, par_dir, dir_name))
-    {
-      printf ("%s:%d,", __FILE__, __LINE__);
-      printf ("%s, %s\n", dir_path, dir_name);
-    }
+  // block_sector_t inode_sector = -1;
+  // bool success = false;
+  // struct dir *par_dir = NULL; // 父文件夹
+  // struct dir *new_dir = NULL; // 新文件夹
+  // char *dir_name = NULL;      // 新文件夹名
+  // char *dir_path = malloc (strlen (dir) + 1);
+  // strlcpy (dir_path, dir, strlen (dir) + 1); // 复制文件夹名
 
-  free (dir_path);
-  return success;
+  // //  验证文件名
+  // if (parse_path (dir_path, par_dir, dir_name))
+  //   {
+  //     printf ("%s:%d,", __FILE__, __LINE__);
+  //     printf ("%s, %s\n", dir_path, dir_name);
+  //   }
+
+  // free (dir_path);
+  // return success;
 }
 
 static int
