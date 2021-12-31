@@ -273,13 +273,13 @@ syscall_open (const char *file)
 
   if (f == NULL)
     return -1;
-  
+
   struct thread *t = thread_current ();
   struct file_descriptor *fd = malloc (sizeof (struct file_descriptor));
   fd->file = f;
   fd->fd = t->next_fd++;
   list_push_back (&t->fd_list, &fd->elem);
-
+  //TODO: fd record self's par dir? (convienient for dir operation)
   return fd->fd;
 }
 

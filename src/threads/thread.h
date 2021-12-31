@@ -133,7 +133,7 @@ struct thread
     struct thread *parent;            // identify parent process
     struct file *self;                // identify the execute file
 #endif
-
+    struct dir* cwd;
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
   };

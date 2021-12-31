@@ -73,13 +73,40 @@ filesys_create (const char *name, off_t initial_size)
 struct file *
 filesys_open (const char *name)
 {
-  struct dir *dir = dir_open_root ();
+  // struct dir *dir = dir_open_path (directory);
   struct inode *inode = NULL;
+  // printf ("%s:%d, %s\n", __FILE__, __LINE__, name);
+  char *directory = (char *) malloc (strlen (name) + 1);
+  char *filename = (char *) malloc (strlen (name) + 1);
+  if (!parse_path (name, directory, filename))
+    {
+      free (directory);
+      free (filename);
+      return NULL;
+    }
 
+  // printf ("%s:%d, %s, %s, %s\n", __FILE__, __LINE__, name, directory, filename);
+  struct dir *dir = dir_open_path (directory);
   if (dir != NULL)
-    dir_lookup (dir, name, &inode);
-  dir_close (dir);
-
+    if (strlen (filename) > 0)
+      {
+        // 如果是文件
+        dir_lookup (dir, filename, &inode);
+        dir_close (dir);
+      }
+    else
+      {
+        // 如果是文件夹
+        inode = dir_get_inode (dir);
+      }
+  if (inode == NULL)
+    {
+      free (directory);
+      free (filename);
+      return NULL;
+    }
+  free (filename);
+  free (directory);
   return file_open (inode);
 }
 
@@ -113,19 +140,20 @@ do_format (void)
 bool
 parse_path (const char *path, char *directory, char *name)
 {
-  //printf ("%s:%d\n", __FILE__, __LINE__);
+  // printf ("%s:%d ", __FILE__, __LINE__);
+  // printf ("%s\n", path);
   struct inode *inode = NULL;
   char *token, *save_ptr;
   struct inode *prev_inode = NULL;
   *name = "";
-
+  char *ret = directory;
 
   if (strlen (path) == 0)
     return false;
 
-  if (path[0] == "/")
+  if (path[0] == '/')
     {
-      *directory = "/";
+      *directory = '/';
       directory++;
     }
 
@@ -142,7 +170,9 @@ parse_path (const char *path, char *directory, char *name)
         }
       tmp = token;
     }
-  *directory = "\0";
+  *directory = '\0';
+
+  directory = ret;
   memcpy (name, tmp, strlen (tmp) + 1);
   return true;
 }
