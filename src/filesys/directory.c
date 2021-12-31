@@ -91,7 +91,7 @@ dir_open_path (const char *path)
   for (char *token = strtok_r (path_copy, "/", &save_ptr); token != NULL;
        token = strtok_r (NULL, "/", &save_ptr))
     {
-      struct die *chd_dir = NULL;
+      struct dir *chd_dir = NULL;
       struct inode *inode = NULL;
 
       /* 如果在该文件夹下找不到对应文件/文件夹*/

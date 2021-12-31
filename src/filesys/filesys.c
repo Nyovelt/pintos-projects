@@ -50,8 +50,8 @@ filesys_create (const char *name, off_t initial_size)
 {
   block_sector_t inode_sector = 0;
   /* get filename and path */
-  char *directory = (char *) malloc (sizeof (char) * (strlen (name) + 1));
-  char *filename = (char *) malloc (sizeof (char) * (strlen (name) + 1));
+  char *directory = (char *) calloc ((strlen (name) + 1), sizeof (char));
+  char *filename = (char *) calloc ((strlen (name) + 1), sizeof (char));
 
   bool success = false;
   if (!parse_path (name, directory, filename))
@@ -87,8 +87,8 @@ filesys_open (const char *name)
 
   struct inode *inode = NULL;
   // printf ("%s:%d, %s\n", __FILE__, __LINE__, name);
-  char *directory = (char *) malloc (strlen (name) + 1);
-  char *filename = (char *) malloc (strlen (name) + 1);
+  char *directory = (char *) calloc ((strlen (name) + 1), sizeof (char));
+  char *filename = (char *) calloc ((strlen (name) + 1), sizeof (char));
   if (!parse_path (name, directory, filename))
     {
       free (directory);
@@ -138,8 +138,8 @@ filesys_open (const char *name)
 bool
 filesys_remove (const char *name)
 {
-  char *directory = (char *) malloc (sizeof (char) * (strlen (name) + 1));
-  char *filename = (char *) malloc (sizeof (char) * (strlen (name) + 1));
+  char *directory = (char *) calloc ((strlen (name) + 1), sizeof (char));
+  char *filename = (char *) calloc ((strlen (name) + 1), sizeof (char));
   bool success = false;
   if (!parse_path (name, directory, filename))
     {
@@ -173,8 +173,8 @@ filesys_chdir (const char *path)
 bool
 filesys_mkdir (const char *path)
 {
-  char *directory = (char *) malloc (sizeof (char) * (strlen (path) + 1));
-  char *filename = (char *) malloc (sizeof (char) * (strlen (path) + 1));
+  char *directory = (char *) calloc ((strlen (path) + 1), sizeof (char));
+  char *filename = (char *) calloc ((strlen (path) + 1), sizeof (char));
   bool success = false;
   if (!parse_path (path, directory, filename))
     {
@@ -184,7 +184,7 @@ filesys_mkdir (const char *path)
   struct dir *dir = dir_open_path (directory);
   block_sector_t inode_sector = 0;
   success = (dir != NULL && free_map_allocate (1, &inode_sector)
-             && dir_create (inode_sector, 10)
+             && dir_create (inode_sector, 16)
              && inode_init_dir (inode_open (inode_sector), dir)
              && dir_add (dir, filename, inode_sector));
 
@@ -226,7 +226,7 @@ parse_path (const char *path, char *directory, char *name)
 
   if (strlen (path) == 0)
     return false;
-  char *path_copy = (char *) malloc (strlen (path) + 1);
+  char *path_copy = (char *) calloc (strlen (path) + 1, sizeof (char));
   memcpy (path_copy, path, strlen (path) + 1);
   if (path[0] == '/')
     {

@@ -269,6 +269,7 @@ syscall_write (int fd, const void *buffer, unsigned size)
 static int
 syscall_open (const char *file)
 {
+  //printf ("%s:%d, syscall_open\n", __FILE__, __LINE__);
   check_string (file);
 
   //lock_acquire (&file_lock);
@@ -279,7 +280,7 @@ syscall_open (const char *file)
     return -1;
 
   struct thread *t = thread_current ();
-  struct file_descriptor *fd = malloc (sizeof (struct file_descriptor));
+  struct file_descriptor *fd = calloc (1, sizeof (struct file_descriptor));
   fd->file = f;
   fd->fd = t->next_fd++;
   list_push_back (&t->fd_list, &fd->elem);

@@ -13,17 +13,20 @@
 struct cache_entry
 {
     struct hash_elem hash_elem; // for sector_cache_map
-    block_sector_t sector;      // the sector id of the block occupying the cache entry.
-    bool dirty;                 // for writing back
-    bool used;                  // for clock algorithm
+    block_sector_t
+        sector; // the sector id of the block occupying the cache entry.
+    bool dirty; // for writing back
+    bool used;  // for clock algorithm
     uint8_t data[BLOCK_SECTOR_SIZE];
     struct rwlock rwlock; // per-entry R/W lock
 };
 
-static struct cache_entry cache[BUF_SIZE]; // a statically alloc’d array of 64 blocks
+static struct cache_entry
+    cache[BUF_SIZE]; // a statically alloc’d array of 64 blocks
 static int used_slots = 0;
-static struct hash sector_cache_map; // a global mapping of sector ids to cache entries
-static struct lock global_lock;      // A global lock to guard the hash-map
+static struct hash
+    sector_cache_map; // a global mapping of sector ids to cache entries
+static struct lock global_lock; // A global lock to guard the hash-map
 static int clock_hand = 0;
 
 /* return a hash value of cache_entry e */
@@ -76,9 +79,9 @@ cache_access_end (block_sector_t sector)
   struct cache_entry *ce = cache_find (sector);
   lock_release (&global_lock);
 
-  ASSERT(ce != NULL);
-  ASSERT(ce->sector == sector);
-  rwlock_end_read(&ce->rwlock);
+  ASSERT (ce != NULL);
+  ASSERT (ce->sector == sector);
+  rwlock_end_read (&ce->rwlock);
 }
 
 void
@@ -96,7 +99,8 @@ cache_writeback ()
 }
 
 void
-cache_write_at (block_sector_t sector, const void *buffer, off_t offset, size_t bytes)
+cache_write_at (block_sector_t sector, const void *buffer, off_t offset,
+                size_t bytes)
 {
 acquire:
   lock_acquire (&global_lock);
@@ -115,7 +119,7 @@ acquire:
   memcpy (ce->data + offset, buffer, bytes);
   ce->dirty = true;
   rwlock_end_write (&ce->rwlock);
-  }
+}
 
 void
 cache_read_at (block_sector_t sector, void *buffer, off_t offset, size_t bytes)
@@ -169,7 +173,8 @@ cache_insert (block_sector_t sector)
     {
       ce = cache + clock_hand;
       int cnt = 0;
-      while (ce->used || (cnt < BUF_SIZE && ce->dirty) || !rwlock_try_write (&ce->rwlock))
+      while (ce->used || (cnt < BUF_SIZE && ce->dirty)
+             || !rwlock_try_write (&ce->rwlock))
         {
           ce->used = false;
           clock_hand++;
