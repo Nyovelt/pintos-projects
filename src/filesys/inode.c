@@ -14,7 +14,7 @@
 /* Identifies an inode. */
 #define INODE_MAGIC 0x494e4f44
 #define NUM_DIRECT                                                             \
-  124 /* ((BLOCK_SECTOR_SIZE - sizeof (off_t) - sizeof (unsigned)) / sizeof (block_sector_t) - 2) */
+  123 /* ((BLOCK_SECTOR_SIZE - sizeof (off_t) - sizeof (unsigned)) / sizeof (block_sector_t) - 2) */
 #define PTRS_PER_SECTOR                                                        \
   128 /* (BLOCK_SECTOR_SIZE / sizeof (block_sector_t *)) */
 
@@ -29,7 +29,8 @@ struct inode_disk
     //block_sector_t start; /* First data sector. */
     off_t length;   /* File size in bytes. */
     unsigned magic; /* Magic number. */
-                    //uint32_t unused[125]; /* Not used. */
+    //uint32_t unused[125]; /* Not used. */
+    bool is_dir;
 };
 
 struct indir_block
@@ -50,14 +51,13 @@ bytes_to_sectors (off_t size)
 /* In-memory inode. */
 struct inode
 {
-    struct list_elem elem; /* Element in inode list. */
-    block_sector_t sector; /* Sector number of disk location. */
-    int open_cnt;          /* Number of openers. */
-    bool removed;          /* True if deleted, false otherwise. */
-    int deny_write_cnt;    /* 0: writes ok, >0: deny writes. */
-    struct lock ext_lock;  /* For file extenstion */
-    //struct inode_disk data; /* Inode content. */
-    bool is_dir;
+    struct list_elem elem;  /* Element in inode list. */
+    block_sector_t sector;  /* Sector number of disk location. */
+    int open_cnt;           /* Number of openers. */
+    bool removed;           /* True if deleted, false otherwise. */
+    int deny_write_cnt;     /* 0: writes ok, >0: deny writes. */
+    struct lock ext_lock;   /* For file extenstion */
+    struct inode_disk data; /* Inode content. */
 };
 
 static bool allocate_direct (off_t, block_sector_t *);
@@ -206,6 +206,7 @@ inode_create (block_sector_t sector, off_t length)
     {
       //size_t sectors = bytes_to_sectors (length);
       disk_inode->length = length;
+      disk_inode->is_dir = false;
       disk_inode->magic = INODE_MAGIC;
       if (ext_free_map_allocate (
               disk_inode)) //free_map_allocate (sectors, &disk_inode->start))
@@ -243,7 +244,7 @@ inode_open (block_sector_t sector)
       if (inode->sector == sector)
         {
           inode_reopen (inode);
-          //printf ("%s:%d, Reopen inode %d\n", __FILE__, __LINE__, sector);
+
           return inode;
         }
     }
@@ -255,14 +256,15 @@ inode_open (block_sector_t sector)
     return NULL;
 
   /* Initialize. */
+
   list_push_front (&open_inodes, &inode->elem);
   inode->sector = sector;
   inode->open_cnt = 1;
   inode->deny_write_cnt = 0;
   inode->removed = false;
-  inode->is_dir = false;
+  //inode->is_dir = false;
   lock_init (&inode->ext_lock);
-  //cache_read_block (inode->sector, &inode->data);
+  cache_read_block (inode->sector, &inode->data);
   return inode;
 }
 
@@ -296,6 +298,7 @@ inode_close (struct inode *inode)
   if (--inode->open_cnt == 0)
     {
       /* Remove from inode list and release lock. */
+
       list_remove (&inode->elem);
 
       /* Deallocate blocks if removed. */
@@ -654,16 +657,22 @@ inode_is_removed (struct inode *inode)
 bool
 inode_is_dir (struct inode *inode)
 {
-  if (inode->is_dir == NULL)
-    return false;
-  return inode->is_dir;
+  return inode->data.is_dir;
 }
 
+void
+inode_set_dir (struct inode *inode)
+{
+  inode->data.is_dir = true;
+  cache_write_block (inode->sector, &inode->data);
+}
 
 bool
 inode_init_dir (struct inode *inode, struct dir *par_dir)
 {
-  inode->is_dir = true;
+
+  inode_set_dir (inode);
+
   struct dir *dir = dir_open (inode);
   bool success = dir_add (dir, ".", inode_get_inumber (inode));
   if (inode_get_inumber (inode) == ROOT_DIR_SECTOR)

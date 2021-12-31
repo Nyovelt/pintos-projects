@@ -61,7 +61,7 @@ filesys_create (const char *name, off_t initial_size)
 
 
   struct dir *dir = dir_open_path (directory);
-  
+
   success = (dir != NULL && free_map_allocate (1, &inode_sector)
              && inode_create (inode_sector, initial_size)
              && dir_add (dir, filename, inode_sector));
@@ -104,18 +104,23 @@ filesys_open (const char *name)
       return NULL;
     }
 
-  if (strlen (filename) > 0)
-    {
-      // 如果是文件
-      dir_lookup (dir, filename, &inode);
-      dir_close (dir);
-    }
-  else
-    {
-      // 如果是文件夹
-      inode = dir_get_inode (dir);
-    }
-  if (inode == NULL || inode_is_removed (inode))
+  bool success = dir_lookup (dir, filename, &inode);
+
+  // if (!inode_is_dir (inode))
+  //   {
+  //     // 如果是文件
+  //     printf ("%s:%d, %s\n", __FILE__, __LINE__, filename);
+  //     dir_lookup (dir, filename, &inode);
+  //     dir_close (dir);
+  //   }
+  // else
+  //   {
+  //     // 如果是文件夹
+  //     printf ("%s:%d, %s\n", __FILE__, __LINE__, filename);
+  //     inode = dir_get_inode (dir);
+  //   }
+
+  if (!success || inode == NULL || inode_is_removed (inode))
     {
       free (directory);
       free (filename);
