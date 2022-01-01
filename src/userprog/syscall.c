@@ -269,12 +269,9 @@ syscall_write (int fd, const void *buffer, unsigned size)
 static int
 syscall_open (const char *file)
 {
-  //printf ("%s:%d, syscall_open\n", __FILE__, __LINE__);
   check_string (file);
 
-  //lock_acquire (&file_lock);
   struct file *f = filesys_open (file);
-  //lock_release (&file_lock);
 
   if (f == NULL)
     return -1;

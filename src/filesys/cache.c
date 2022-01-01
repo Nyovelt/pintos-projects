@@ -28,15 +28,14 @@ struct cache_entry
 
 struct read_ahead_block
 {
-    block_sector_t sector; /*!< Next sector index. */
-    struct list_elem elem; /*!< Add this to the list. */
+    block_sector_t sector;
+    struct list_elem elem;
 };
 
-static struct cache_entry
-    cache[BUF_SIZE];            // a statically alloc’d array of 64 blocks
+static struct cache_entry cache[BUF_SIZE];            // a statically alloc’d array of 64 blocks
 static struct lock global_lock; // A global lock to guard the hash-map
-static int clock_hand = 0;
-static struct list read_ahead_list;
+static int clock_hand = 0;      // for clock algorithm
+static struct list read_ahead_list; // read-ahead queue
 
 /* return a hash value of cache_entry e */
 static struct cache_entry *cache_find (const block_sector_t);
@@ -44,13 +43,6 @@ static struct cache_entry *cache_insert (const block_sector_t);
 static void write_behind (void);
 static void read_ahead_handler (block_sector_t sector_idx);
 static void read_ahead (void);
-
-
-/* TODO: 
-1. 上锁 [Urgent]
-2. 完善哈希部分[Delayed]
-3. 完善时钟算法[]
-*/
 
 void
 cache_init ()
@@ -67,7 +59,7 @@ cache_init ()
     }
   filesys_closing = false;
   sema_init (&read_ahead_sema, 0);
-  //thread_create ("write-behind", PRI_DEFAULT, (thread_func *) write_behind, NULL);
+  thread_create ("write-behind", PRI_DEFAULT, (thread_func *) write_behind, NULL);
   //thread_create ("read-ahead", PRI_DEFAULT, (thread_func *) read_ahead, NULL);
 }
 
@@ -82,10 +74,8 @@ cache_writeback ()
       if (cache[i].dirty)
         {
           ASSERT (cache[i].sector != -1u);
-          //rwlock_begin_write(&cache[i].rwlock);
           block_write (fs_device, cache[i].sector, cache[i].data);
           cache[i].dirty = false;
-          //rwlock_end_write(&cache[i].rwlock);
         }
     }
   lock_release (&global_lock);
@@ -112,13 +102,6 @@ write_acquire:
   memcpy (ce->data + offset, buffer, bytes);
   ce->dirty = true;
   rwlock_end_write (&ce->rwlock);
-  /*lock_acquire (&global_lock);
-  struct cache_entry *ce = cache_find (sector);
-  if (ce == NULL)
-    ce = cache_insert (sector);
-  memcpy (ce->data + offset, buffer, bytes);
-  ce->dirty = true;
-  lock_release (&global_lock);*/
 }
 
 void
@@ -140,12 +123,6 @@ read_acquire:
 
   memcpy (buffer, ce->data + offset, bytes);
   rwlock_end_read (&ce->rwlock);
-  /*lock_acquire (&global_lock);
-  struct cache_entry *ce = cache_find (sector);
-  if (ce == NULL)
-    ce = cache_insert (sector);
-  memcpy (buffer, ce->data + offset, bytes);
-  lock_release (&global_lock);*/
 }
 
 /* return a hash value of cache_entry e */
@@ -169,7 +146,6 @@ struct cache_entry *
 cache_insert (block_sector_t sector)
 {
   struct cache_entry *ce = NULL;
-  //lock_acquire (&global_lock);
   for (int i = 0; i < BUF_SIZE; i++)
     {
       if (!cache[i].valid)
@@ -179,7 +155,6 @@ cache_insert (block_sector_t sector)
           ce->used = true;
           block_read (fs_device, sector, ce->data);
           ce->valid = true;
-          //lock_release (&global_lock);
           return ce;
         }
     }
@@ -194,7 +169,6 @@ cache_insert (block_sector_t sector)
       ce = cache + clock_hand;
       cnt++;
     }
-  //lock_release (&global_lock);
   if (ce->dirty)
     {
       block_write (fs_device, ce->sector, ce->data);
@@ -204,7 +178,6 @@ cache_insert (block_sector_t sector)
   ce->sector = sector;
   ce->used = true;
   block_read (fs_device, sector, ce->data);
-  //read_ahead_handler(sector + 1);
   rwlock_end_write (&ce->rwlock);
   return ce;
 }
@@ -242,7 +215,8 @@ read_ahead (void)
         {
           struct list_elem *cur_elem = list_pop_front (&read_ahead_list);
           struct read_ahead_block *to_read = list_entry (cur_elem, struct read_ahead_block, elem);
-          read_ahead_handler (to_read->sector);
+          if (cache_find(to_read->sector) == NULL)
+            cache_insert(to_read->sector);
           free (to_read);
         }
       sema_up (&read_ahead_sema);

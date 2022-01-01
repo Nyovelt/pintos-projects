@@ -61,8 +61,6 @@ dir_open_root (void)
 struct dir *
 dir_open_path (const char *path)
 {
-  // printf ("%s", path);
-
   /* 首先把 path 拷贝 */
   char *path_copy = malloc (strlen (path) + 1);
   memcpy (path_copy, path, strlen (path) + 1);
@@ -73,7 +71,6 @@ dir_open_path (const char *path)
     if (thread_current ()->cwd != NULL)
       {
         dir_close (dir);
-        // /printf ("%s:%d: The CWD works\n", __FILE__, __LINE__);
         dir = dir_reopen (thread_current ()->cwd);
         if (dir == NULL)
           {
@@ -265,12 +262,12 @@ dir_remove (struct dir *dir, const char *name)
   /* Find directory entry. */
   if (!lookup (dir, name, &e, &ofs))
     goto done;
-  //printf ("begin open: %s\n", name);
+
   /* Open inode. */
   inode = inode_open (e.inode_sector);
   if (inode == NULL)
     goto done;
-  //printf ("begin check in use: %s\n", name);
+
   // 不能关掉正在用的文件夹
   if (inode_is_dir (inode))
     {
@@ -290,14 +287,12 @@ dir_remove (struct dir *dir, const char *name)
       if (!empty)
         goto done;
     }
-  //printf ("begin erase: %s\n", name);
 
   /* Erase directory entry. */
   e.in_use = false;
   if (inode_write_at (dir->inode, &e, sizeof e, ofs) != sizeof e)
     goto done;
 
-  // ("dir_remove: %s\n", name);
   /* Remove inode. */
   inode_remove (inode);
   success = true;

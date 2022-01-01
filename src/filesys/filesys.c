@@ -108,19 +108,15 @@ filesys_open (const char *name)
       return NULL;
     }
 
-  // /bool success = dir_lookup (dir, filename, &inode);
-
   if (strlen (filename) != 0)
     {
       // 如果是文件
-
       dir_lookup (dir, filename, &inode);
       dir_close (dir);
     }
   else
     {
       // 如果是文件夹
-
       inode = dir_get_inode (dir);
     }
 
@@ -151,9 +147,7 @@ filesys_remove (const char *name)
       goto filesys_remove_error;
     }
   struct dir *dir = dir_open_path (directory);
-//  printf ("%s:%d, %s, %s\n", __FILE__, __LINE__, name, filename);
   success = dir != NULL && dir_remove (dir, filename);
- // printf ("%s:%d, %s %d\n", __FILE__, __LINE__, name, success);
   dir_close (dir);
 filesys_remove_error:
   free (directory);
@@ -183,10 +177,7 @@ filesys_mkdir (const char *path)
   char *filename = (char *) calloc ((strlen (path) + 1), sizeof (char));
   bool success = false;
   if (!parse_path (path, directory, filename))
-    {
       goto filesys_mkdir_error;
-    }
-  //printf ("%s:%d, %s, %s, %s \n", __FILE__, __LINE__, path, directory, filename);
   struct dir *dir = dir_open_path (directory);
   block_sector_t inode_sector = 0;
 
@@ -211,7 +202,6 @@ filesys_mkdir_error:
 static void
 do_format (void)
 {
-  //printf ("Formatting file system...");
   free_map_create ();
   if (!dir_create (ROOT_DIR_SECTOR, 16))
     PANIC ("root directory creation failed");
@@ -223,19 +213,13 @@ do_format (void)
   inode_close (inode);
 
   free_map_close ();
-  //printf ("done.\n");
 }
 
 /* 首先从 root 一层层进行递归， 通过 strtok 来不断的拆文件夹名 */
 bool
 parse_path (const char *path, char *directory, char *name)
 {
-
-  // printf ("%s:%d ", __FILE__, __LINE__);
-  // printf ("%s\n", path);
-  struct inode *inode = NULL;
   char *token, *save_ptr;
-  struct inode *prev_inode = NULL;
 
   *name = '\0';
   char *ret = directory;
@@ -250,16 +234,7 @@ parse_path (const char *path, char *directory, char *name)
       directory++;
     }
 
-  //*directory = dir_open_root (); //TODO: 假设先从 root 开始， 后面再改进
   char *tmp = "";
-  // int i = 0;
-  // printf ("%s:%d,%s,  %s \n", __FILE__, __LINE__, path_copy, token);
-  // // return 1;
-  // token = strtok_r (path_copy, "/", &save_ptr);
-  // printf ("%s:%d,%s,  %s, %s \n", __FILE__, __LINE__, path_copy, token, save_ptr);
-
-  // token = strtok_r (NULL, "/", &save_ptr);
-
 
   for (token = strtok_r (path_copy, "/", &save_ptr); token != NULL;
        token = strtok_r (NULL, "/", &save_ptr))
@@ -279,7 +254,6 @@ parse_path (const char *path, char *directory, char *name)
   directory = ret;
 
   memcpy (name, tmp, strlen (tmp) + 1);
-  // printf ("%s:%d,%s,  %s \n", __FILE__, __LINE__, directory, name);
   free (path_copy);
   return true;
 }
