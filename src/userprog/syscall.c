@@ -197,7 +197,7 @@ syscall_handler (struct intr_frame *f UNUSED)
       is_valid_ptr (f->esp, 1);
       f->eax = syscall_inumber (*((int *) f->esp + 1));
       break;
-    default: printf ("unknown syscall.\n");
+    default: syscall_exit (-1);
     }
 }
 

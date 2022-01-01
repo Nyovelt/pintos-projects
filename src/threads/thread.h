@@ -124,14 +124,16 @@ struct thread
       FAIL,
       WAITING,
       FINISHED
-    } load_status;                    // logging child process loads
-    struct semaphore sema_load;       // wait for a child process to finish loading
-    struct semaphore child_sema_load; // tell child processes to continue execution
-    struct semaphore sema_wait;       // wait for a child process to finish running
-    struct semaphore child_sema_wait; // tell child processes to continue to exit
-    int exit_status;                  // status code returned to the parent when exits
-    struct thread *parent;            // identify parent process
-    struct file *self;                // identify the execute file
+    } load_status;              // logging child process loads
+    struct semaphore sema_load; // wait for a child process to finish loading
+    struct semaphore
+        child_sema_load;        // tell child processes to continue execution
+    struct semaphore sema_wait; // wait for a child process to finish running
+    struct semaphore
+        child_sema_wait;   // tell child processes to continue to exit
+    int exit_status;       // status code returned to the parent when exits
+    struct thread *parent; // identify parent process
+    struct file *self;     // identify the execute file
 #endif
     struct dir *cwd;
     /* Owned by thread.c. */

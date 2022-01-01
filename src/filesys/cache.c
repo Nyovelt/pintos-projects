@@ -67,14 +67,14 @@ cache_init ()
     }
   filesys_closing = false;
   sema_init (&read_ahead_sema, 0);
-  thread_create ("write-behind", PRI_DEFAULT, (thread_func *) write_behind, NULL);
-  thread_create ("read-ahead", PRI_DEFAULT, (thread_func *) read_ahead, NULL);
+  //thread_create ("write-behind", PRI_DEFAULT, (thread_func *) write_behind, NULL);
+  //thread_create ("read-ahead", PRI_DEFAULT, (thread_func *) read_ahead, NULL);
 }
 
 void
 cache_writeback ()
 {
-  lock_acquire(&global_lock);
+  lock_acquire (&global_lock);
   for (int i = 0; i < BUF_SIZE; i++)
     {
       if (!cache[i].valid)
@@ -88,7 +88,7 @@ cache_writeback ()
           //rwlock_end_write(&cache[i].rwlock);
         }
     }
-  lock_release(&global_lock);
+  lock_release (&global_lock);
 }
 
 void
@@ -247,4 +247,15 @@ read_ahead (void)
         }
       sema_up (&read_ahead_sema);
     }
+}
+void
+cache_write_block (block_sector_t sector, const void *buffer)
+{
+  cache_write_at (sector, buffer, 0, BLOCK_SECTOR_SIZE);
+}
+
+void
+cache_read_block (block_sector_t sector, void *buffer)
+{
+  cache_read_at (sector, buffer, 0, BLOCK_SECTOR_SIZE);
 }

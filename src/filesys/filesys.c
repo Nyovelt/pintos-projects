@@ -151,9 +151,9 @@ filesys_remove (const char *name)
       goto filesys_remove_error;
     }
   struct dir *dir = dir_open_path (directory);
-  //printf ("%s:%d, %s, %s\n", __FILE__, __LINE__, name, filename);
+//  printf ("%s:%d, %s, %s\n", __FILE__, __LINE__, name, filename);
   success = dir != NULL && dir_remove (dir, filename);
-  //printf("%s:%d, %s %d\n", __FILE__, __LINE__, name, success);
+ // printf ("%s:%d, %s %d\n", __FILE__, __LINE__, name, success);
   dir_close (dir);
 filesys_remove_error:
   free (directory);
@@ -189,10 +189,13 @@ filesys_mkdir (const char *path)
   //printf ("%s:%d, %s, %s, %s \n", __FILE__, __LINE__, path, directory, filename);
   struct dir *dir = dir_open_path (directory);
   block_sector_t inode_sector = 0;
+
   success = (dir != NULL && free_map_allocate (1, &inode_sector)
-             && dir_create (inode_sector, 16)
-             && inode_init_dir (inode_open (inode_sector), dir)
-             && dir_add (dir, filename, inode_sector));
+             && dir_create (inode_sector, 16));
+  struct inode *inode = inode_open (inode_sector);
+  success = success && inode_init_dir (inode, dir)
+            && dir_add (dir, filename, inode_sector);
+  inode_close (inode);
 
   if (!success && inode_sector != 0)
     free_map_release (inode_sector, 1);
@@ -212,6 +215,13 @@ do_format (void)
   free_map_create ();
   if (!dir_create (ROOT_DIR_SECTOR, 16))
     PANIC ("root directory creation failed");
+  struct inode *inode = inode_open (ROOT_DIR_SECTOR);
+  if (inode != NULL)
+    {
+      inode_init_dir (inode, NULL);
+    }
+  inode_close (inode);
+
   free_map_close ();
   //printf ("done.\n");
 }
