@@ -110,7 +110,7 @@ dir_open_path (const char *path)
           free (path_copy);
           return NULL;
         }
-
+      dir_close (dir);
       // 这个时候的 inode 就是下一层文件夹的 ”文件 inode“
       dir = chd_dir;
     }
