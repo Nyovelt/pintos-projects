@@ -24,7 +24,8 @@
 #define ARGS_LIMIT 128
 
 static thread_func start_process NO_RETURN;
-static bool load (const char *cmdline, void (**eip) (void), void **esp, const char **argv);
+static bool load (const char *cmdline, void (**eip) (void), void **esp,
+                  const char **argv);
 
 
 /* Starts a new thread running a user program loaded from
@@ -44,15 +45,14 @@ process_execute (const char *file_name)
   if (fn_copy == NULL)
     return TID_ERROR;
 
-  lock_acquire (&file_lock);
+  //lock_acquire (&file_lock);
   strlcpy (fn_copy, file_name, PGSIZE);
 
   /* Parse the ﬁlename deliminating by white spaces */
   char *argv_[ARGS_LIMIT];
   char *token, *save_ptr;
   int argc = 0;
-  for (token = strtok_r (fn_copy, " ", &save_ptr);
-       token != NULL;
+  for (token = strtok_r (fn_copy, " ", &save_ptr); token != NULL;
        token = strtok_r (NULL, " ", &save_ptr))
     argv_[argc++] = token;
   argv_[argc] = NULL;
@@ -68,7 +68,7 @@ process_execute (const char *file_name)
       struct thread *chd = get_thread_by_tid (tid);
       if (chd == NULL) // 如果进程不存在
         {
-          lock_release (&file_lock);
+          //lock_release (&file_lock);
           return -1;
         }
       sema_down (&(chd->sema_load)); // 等待进程加载完成
@@ -78,14 +78,17 @@ process_execute (const char *file_name)
         {
           // 失败
           sema_up (&(chd->child_sema_load));
-          lock_release (&file_lock);
+          //lock_release (&file_lock);
           return -1;
         }
       chd->parent = t; // I am your father, prepare to die.
+      if (t->cwd != NULL)
+        chd->cwd = dir_reopen (t->cwd);
+
       list_push_back (&thread_current ()->child_list, &chd->child_elem);
       sema_up (&(chd->child_sema_load));
     }
-  lock_release (&file_lock);
+  //lock_release (&file_lock);
   return tid;
 }
 
@@ -105,15 +108,17 @@ start_process (void *argv)
   if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
-  success = load (file_name, &if_.eip, &if_.esp, argv); // load access to filename as well as args
+  success = load (file_name, &if_.eip, &if_.esp,
+                  argv); // load access to filename as well as args
 
   if (!success)
     {
       thread_current ()->exit_code = -1;
       thread_current ()->load_status = FAIL;
     }
-  sema_up (&(thread_current ()->sema_load));         // 告诉 syscall_exec 我装完了
-  sema_down (&(thread_current ()->child_sema_load)); // 等待 syscall_exec 执行完毕
+  sema_up (&(thread_current ()->sema_load)); // 告诉 syscall_exec 我装完了
+  sema_down (
+      &(thread_current ()->child_sema_load)); // 等待 syscall_exec 执行完毕
 
   /* If load failed, quit. */
   palloc_free_page (file_name);
@@ -130,10 +135,7 @@ start_process (void *argv)
      arguments on the stack in the form of a `struct intr_frame',
      we just point the stack pointer (%esp) to our stack frame
      and jump to it. */
-  asm volatile("movl %0, %%esp; jmp intr_exit"
-               :
-               : "g"(&if_)
-               : "memory");
+  asm volatile("movl %0, %%esp; jmp intr_exit" : : "g"(&if_) : "memory");
   NOT_REACHED ();
 }
 
@@ -152,8 +154,7 @@ process_wait (tid_t child_tid UNUSED)
   struct thread *chd = NULL;
   /* get current thread child with right pid_t */
   for (struct list_elem *e = list_begin (&thread_current ()->child_list);
-       e != list_end (&thread_current ()->child_list);
-       e = list_next (e))
+       e != list_end (&thread_current ()->child_list); e = list_next (e))
     {
       struct thread *t = list_entry (e, struct thread, child_elem);
       if (t->tid == child_tid)
@@ -187,18 +188,17 @@ process_exit (void)
   sema_up (&cur->sema_wait);
   cur->load_status = FINISHED;
   uint32_t *pd;
-  lock_acquire (&file_lock);
+  //lock_acquire (&file_lock);
   if (cur->self != NULL)
     file_close (cur->self);
-  lock_release (&file_lock);
+  //lock_release (&file_lock);
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
   if (cur->parent != NULL)
     sema_down (&cur->child_sema_wait);
 
   for (struct list_elem *e = list_begin (&thread_current ()->child_list);
-       e != list_end (&thread_current ()->child_list);
-       e = list_next (e))
+       e != list_end (&thread_current ()->child_list); e = list_next (e))
     {
       struct thread *t = list_entry (e, struct thread, child_elem);
       if (t != NULL)
@@ -207,16 +207,18 @@ process_exit (void)
 
   /* Close all files and free resource */
   struct list_elem *to_del;
-  for (struct list_elem *e = list_begin (&cur->fd_list); e != list_end (&cur->fd_list); e = to_del)
+  for (struct list_elem *e = list_begin (&cur->fd_list);
+       e != list_end (&cur->fd_list); e = to_del)
     {
       struct file_descriptor *f = list_entry (e, struct file_descriptor, elem);
-      lock_acquire (&file_lock);
+      //lock_acquire (&file_lock);
       file_close (f->file);
       to_del = list_next (e);
       free (f);
-      lock_release (&file_lock);
+      //lock_release (&file_lock);
     }
-
+  if (cur->cwd != NULL)
+    dir_close (cur->cwd);
   pd = cur->pagedir;
   if (pd != NULL)
     {
@@ -348,12 +350,9 @@ load (const char *file_name, void (**eip) (void), void **esp, const char **argv)
 
   /* Read and verify executable header. */
   if (file_read (file, &ehdr, sizeof ehdr) != sizeof ehdr
-      || memcmp (ehdr.e_ident, "\177ELF\1\1\1", 7)
-      || ehdr.e_type != 2
-      || ehdr.e_machine != 3
-      || ehdr.e_version != 1
-      || ehdr.e_phentsize != sizeof (struct Elf32_Phdr)
-      || ehdr.e_phnum > 1024)
+      || memcmp (ehdr.e_ident, "\177ELF\1\1\1", 7) || ehdr.e_type != 2
+      || ehdr.e_machine != 3 || ehdr.e_version != 1
+      || ehdr.e_phentsize != sizeof (struct Elf32_Phdr) || ehdr.e_phnum > 1024)
     {
       printf ("load: %s: error loading executable\n", file_name);
       goto done;
@@ -383,8 +382,7 @@ load (const char *file_name, void (**eip) (void), void **esp, const char **argv)
           break;
         case PT_DYNAMIC:
         case PT_INTERP:
-        case PT_SHLIB:
-          goto done;
+        case PT_SHLIB: goto done;
         case PT_LOAD:
           if (validate_segment (&phdr, file))
             {
@@ -408,8 +406,8 @@ load (const char *file_name, void (**eip) (void), void **esp, const char **argv)
                   read_bytes = 0;
                   zero_bytes = ROUND_UP (page_offset + phdr.p_memsz, PGSIZE);
                 }
-              if (!load_segment (file, file_page, (void *) mem_page,
-                                 read_bytes, zero_bytes, writable))
+              if (!load_segment (file, file_page, (void *) mem_page, read_bytes,
+                                 zero_bytes, writable))
                 goto done;
             }
           else
@@ -503,8 +501,8 @@ validate_segment (const struct Elf32_Phdr *phdr, struct file *file)
    Return true if successful, false if a memory allocation error
    or disk read error occurs. */
 static bool
-load_segment (struct file *file, off_t ofs, uint8_t *upage,
-              uint32_t read_bytes, uint32_t zero_bytes, bool writable)
+load_segment (struct file *file, off_t ofs, uint8_t *upage, uint32_t read_bytes,
+              uint32_t zero_bytes, bool writable)
 {
   ASSERT ((read_bytes + zero_bytes) % PGSIZE == 0);
   ASSERT (pg_ofs (upage) == 0);

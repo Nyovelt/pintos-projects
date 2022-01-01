@@ -8,24 +8,23 @@
 #include "threads/synch.h" // lock
 
 /* States in a thread's life cycle. */
-enum thread_status
-  {
-    THREAD_RUNNING,     /* Running thread. */
-    THREAD_READY,       /* Not running but ready to run. */
-    THREAD_BLOCKED,     /* Waiting for an event to trigger. */
-    THREAD_DYING        /* About to be destroyed. */
-  };
+enum thread_status {
+  THREAD_RUNNING, /* Running thread. */
+  THREAD_READY,   /* Not running but ready to run. */
+  THREAD_BLOCKED, /* Waiting for an event to trigger. */
+  THREAD_DYING    /* About to be destroyed. */
+};
 
 
 /* Thread identifier type.
    You can redefine this to whatever type you like. */
 typedef int tid_t;
-#define TID_ERROR ((tid_t) -1)          /* Error value for tid_t. */
+#define TID_ERROR ((tid_t) -1) /* Error value for tid_t. */
 
 /* Thread priorities. */
-#define PRI_MIN 0                       /* Lowest priority. */
-#define PRI_DEFAULT 31                  /* Default priority. */
-#define PRI_MAX 63                      /* Highest priority. */
+#define PRI_MIN 0      /* Lowest priority. */
+#define PRI_DEFAULT 31 /* Default priority. */
+#define PRI_MAX 63     /* Highest priority. */
 
 /* Lock manipulate files across threads */
 struct lock file_lock;
@@ -87,56 +86,59 @@ struct lock file_lock;
    ready state is on the run queue, whereas only a thread in the
    blocked state is on a semaphore wait list. */
 struct thread
-  {
+{
     /* Owned by thread.c. */
-    tid_t tid;                          /* Thread identifier. */
-    enum thread_status status;          /* Thread state. */
-    char name[16];                      /* Name (for debugging purposes). */
-    uint8_t *stack;                     /* Saved stack pointer. */
-    int priority;                       /* Priority. */
-    struct list_elem allelem;           /* List element for all threads list. */
+    tid_t tid;                 /* Thread identifier. */
+    enum thread_status status; /* Thread state. */
+    char name[16];             /* Name (for debugging purposes). */
+    uint8_t *stack;            /* Saved stack pointer. */
+    int priority;              /* Priority. */
+    struct list_elem allelem;  /* List element for all threads list. */
 
     /* Shared between thread.c and synch.c. */
-    struct list_elem elem;              /* List element. */
+    struct list_elem elem; /* List element. */
 
-   /* For Alarm */
-    uint64_t blocked_ticks;             /* The number of ticks the thread is blocked. */
+    /* For Alarm */
+    uint64_t blocked_ticks; /* The number of ticks the thread is blocked. */
 
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
-    uint32_t *pagedir;                  /* Page directory. */
-    int exit_code;                      /* Exit code. */
+    uint32_t *pagedir; /* Page directory. */
+    int exit_code;     /* Exit code. */
 
     int next_fd;
     struct list fd_list;
     struct file_descriptor
     {
-      struct file *file;
-      int fd;
-      struct list_elem elem;
-    } file_descriptor_;               // record the list of opened files
+        struct file *file;
+        int fd;
+        struct list_elem elem;
+        struct dir *dir;
+    } file_descriptor_; // record the list of opened files
 
     /* begin exec */
-    struct list child_list;           // eist of child processes
-    struct list_elem child_elem;      // elements in the list of child processes
+    struct list child_list;      // eist of child processes
+    struct list_elem child_elem; // elements in the list of child processes
     enum exec_status {
       SUCCESS,
       FAIL,
       WAITING,
       FINISHED
-    } load_status;                    // logging child process loads
-    struct semaphore sema_load;       // wait for a child process to finish loading
-    struct semaphore child_sema_load; // tell child processes to continue execution
-    struct semaphore sema_wait;       // wait for a child process to finish running
-    struct semaphore child_sema_wait; // tell child processes to continue to exit
-    int exit_status;                  // status code returned to the parent when exits
-    struct thread *parent;            // identify parent process
-    struct file *self;                // identify the execute file
+    } load_status;              // logging child process loads
+    struct semaphore sema_load; // wait for a child process to finish loading
+    struct semaphore
+        child_sema_load;        // tell child processes to continue execution
+    struct semaphore sema_wait; // wait for a child process to finish running
+    struct semaphore
+        child_sema_wait;   // tell child processes to continue to exit
+    int exit_status;       // status code returned to the parent when exits
+    struct thread *parent; // identify parent process
+    struct file *self;     // identify the execute file
 #endif
-
+    struct dir *cwd;
     /* Owned by thread.c. */
-    unsigned magic;                     /* Detects stack overflow. */
-  };
+    unsigned magic; /* Detects stack overflow. */
+};
 
 /* If false (default), use round-robin scheduler.
    If true, use multi-level feedback queue scheduler.

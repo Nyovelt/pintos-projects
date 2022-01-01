@@ -13,14 +13,15 @@
 #include "devices/input.h"
 #include "filesys/filesys.h"
 #include "filesys/file.h"
+#include "filesys/inode.h"
 #include "userprog/process.h"
+#include "devices/block.h"
 
 typedef int pid_t;
 #define STDIN 0
 #define STDOUT 1
 
-static void
-syscall_handler (struct intr_frame *);
+static void syscall_handler (struct intr_frame *);
 
 static int syscall_open (const char *file);
 static int syscall_close (int fd);
@@ -35,7 +36,11 @@ static void syscall_seek (int fd, unsigned position);
 static unsigned syscall_tell (int fd);
 static pid_t syscall_exec (const char *cmd_line);
 static int syscall_wait (pid_t pid);
-
+static int syscall_chdir (const char *dir);
+static bool syscall_mkdir (const char *dir);
+static int syscall_readdir (int fd, char name[READDIR_MAX_LEN + 1]);
+static int syscall_isdir (int fd);
+static int syscall_inumber (int fd);
 void
 syscall_init (void)
 {
@@ -45,7 +50,8 @@ syscall_init (void)
 static inline bool
 is_valid_addr (const void *addr)
 {
-  return is_user_vaddr (addr) && pagedir_get_page (thread_current ()->pagedir, addr);
+  return is_user_vaddr (addr)
+         && pagedir_get_page (thread_current ()->pagedir, addr);
 }
 
 static inline void
@@ -92,7 +98,8 @@ get_file_descriptor (int fd)
   struct thread *t = thread_current ();
   if (list_begin (&t->fd_list) == NULL)
     return NULL;
-  for (struct list_elem *e = list_begin (&t->fd_list); e != list_end (&t->fd_list); e = list_next (e))
+  for (struct list_elem *e = list_begin (&t->fd_list);
+       e != list_end (&t->fd_list); e = list_next (e))
     {
       struct file_descriptor *f = list_entry (e, struct file_descriptor, elem);
       if (f == NULL || f->fd == 0)
@@ -111,9 +118,7 @@ syscall_handler (struct intr_frame *f UNUSED)
 
   switch (*(int *) f->esp)
     {
-    case SYS_HALT:
-      syscall_halt ();
-      break;
+    case SYS_HALT: syscall_halt (); break;
     case SYS_EXIT:
       is_valid_ptr (f->esp, 1);
       syscall_exit (*((int *) f->esp + 1));
@@ -129,7 +134,8 @@ syscall_handler (struct intr_frame *f UNUSED)
     case SYS_CREATE:
       is_valid_ptr (f->esp, 2);
       check_string (*((const char **) f->esp + 1));
-      f->eax = syscall_create (*((const char **) f->esp + 1), *((unsigned *) f->esp + 2));
+      f->eax = syscall_create (*((const char **) f->esp + 1),
+                               *((unsigned *) f->esp + 2));
       break;
     case SYS_REMOVE:
       is_valid_ptr (f->esp, 1);
@@ -147,12 +153,15 @@ syscall_handler (struct intr_frame *f UNUSED)
     case SYS_READ:
       is_valid_ptr (f->esp, 3);
       check_memory (*((void **) f->esp + 2), *((unsigned *) f->esp + 3));
-      f->eax = syscall_read (*((int *) f->esp + 1), (void *) (*((int *) f->esp + 2)), *((unsigned *) f->esp + 3));
+      f->eax = syscall_read (*((int *) f->esp + 1),
+                             (void *) (*((int *) f->esp + 2)),
+                             *((unsigned *) f->esp + 3));
       break;
     case SYS_WRITE:
       is_valid_ptr (f->esp, 3);
       check_memory (*((void **) f->esp + 2), *((unsigned *) f->esp + 3));
-      f->eax = syscall_write (*((int *) f->esp + 1), (*((void **) f->esp + 2)), *((unsigned *) f->esp + 3));
+      f->eax = syscall_write (*((int *) f->esp + 1), (*((void **) f->esp + 2)),
+                              *((unsigned *) f->esp + 3));
       break;
     case SYS_SEEK:
       is_valid_ptr (f->esp, 2);
@@ -166,8 +175,29 @@ syscall_handler (struct intr_frame *f UNUSED)
       is_valid_ptr (f->esp, 1);
       f->eax = syscall_close (*((int *) f->esp + 1));
       break;
-    default:
-      printf ("unknown syscall.\n");
+    case SYS_CHDIR:
+      is_valid_ptr (f->esp, 1);
+      check_string (*((const char **) f->esp + 1));
+      f->eax = syscall_chdir (*((const char **) f->esp + 1));
+      break;
+    case SYS_MKDIR:
+      is_valid_ptr (f->esp, 1);
+      f->eax = syscall_mkdir (*((const char **) f->esp + 1));
+      break;
+    case SYS_READDIR:
+      is_valid_ptr (f->esp, 2);
+      f->eax = syscall_readdir (*((int *) f->esp + 1),
+                                (char *) (*((int *) f->esp + 2)));
+      break;
+    case SYS_ISDIR:
+      is_valid_ptr (f->esp, 1);
+      f->eax = syscall_isdir (*((int *) f->esp + 1));
+      break;
+    case SYS_INUMBER:
+      is_valid_ptr (f->esp, 1);
+      f->eax = syscall_inumber (*((int *) f->esp + 1));
+      break;
+    default: syscall_exit (-1);
     }
 }
 
@@ -222,7 +252,8 @@ syscall_write (int fd, const void *buffer, unsigned size)
   else
     {
       struct file_descriptor *f = get_file_descriptor (fd);
-      if (f == NULL || f->fd == 0 || f->file == NULL)
+      if (f == NULL || f->fd == 0 || f->file == NULL
+          || inode_is_dir (file_get_inode (f->file)))
         {
           //lock_release (&file_lock);
           return -1;
@@ -238,6 +269,7 @@ syscall_write (int fd, const void *buffer, unsigned size)
 static int
 syscall_open (const char *file)
 {
+  //printf ("%s:%d, syscall_open\n", __FILE__, __LINE__);
   check_string (file);
 
   //lock_acquire (&file_lock);
@@ -248,11 +280,18 @@ syscall_open (const char *file)
     return -1;
 
   struct thread *t = thread_current ();
-  struct file_descriptor *fd = malloc (sizeof (struct file_descriptor));
+  struct file_descriptor *fd = calloc (1, sizeof (struct file_descriptor));
   fd->file = f;
   fd->fd = t->next_fd++;
   list_push_back (&t->fd_list, &fd->elem);
-
+  //TODO: fd record self's par dir? (convienient for dir operation)
+  struct inode *inode = file_get_inode (fd->file);
+  if (inode != NULL && inode_is_dir (inode))
+    {
+      fd->dir = dir_open (inode_reopen (inode));
+    }
+  else
+    fd->dir = NULL;
   return fd->fd;
 }
 
@@ -261,7 +300,8 @@ syscall_close (int fd)
 {
   struct thread *t = thread_current ();
   //lock_acquire (&file_lock);
-  for (struct list_elem *e = list_begin (&t->fd_list); e != list_end (&t->fd_list); e = list_next (e))
+  for (struct list_elem *e = list_begin (&t->fd_list);
+       e != list_end (&t->fd_list); e = list_next (e))
     {
       struct file_descriptor *f = list_entry (e, struct file_descriptor, elem);
       if (f == NULL || f->fd == 0)
@@ -273,6 +313,8 @@ syscall_close (int fd)
         {
           list_remove (e);
           file_close (f->file);
+          if (f->dir)
+            dir_close (f->dir);
           free (f);
           //lock_release (&file_lock);
           return 0;
@@ -370,4 +412,51 @@ syscall_wait (pid_t pid)
   if (pid == -1)
     return -1;
   return process_wait (pid);
+}
+
+static int
+syscall_chdir (const char *dir)
+{
+  // printf ("Syscall: chdir\n");
+  check_string (dir);
+  return filesys_chdir (dir);
+}
+static bool
+syscall_mkdir (const char *dir)
+{
+  bool ret = filesys_mkdir (dir);
+  return ret;
+}
+
+static int
+syscall_readdir (int fd, char name[READDIR_MAX_LEN + 1])
+{
+
+  struct file_descriptor *f = get_file_descriptor (fd);
+  if (f == NULL || f->fd == 0 || f->file == NULL)
+    return false;
+  struct inode *inode;
+  inode = file_get_inode (f->file);
+
+  if (inode == NULL || !inode_is_dir (inode))
+    return false;
+  bool ret = dir_readdir (f->dir, name);
+  return ret;
+}
+
+static int
+syscall_isdir (int fd)
+{
+  // printf ("Syscall: isdir\n");
+  struct file_descriptor *f = get_file_descriptor (fd);
+  if (f->file != NULL)
+    return inode_is_dir (file_get_inode (f->file));
+  return 0;
+}
+static int
+syscall_inumber (int fd)
+{
+  // printf ("Syscall: inumber\n");
+  struct file_descriptor *f = get_file_descriptor (fd);
+  return inode_get_inumber (file_get_inode (f->file));
 }
