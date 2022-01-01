@@ -264,12 +264,12 @@ dir_remove (struct dir *dir, const char *name)
   /* Find directory entry. */
   if (!lookup (dir, name, &e, &ofs))
     goto done;
-
+printf("begin open: %s\n", name);
   /* Open inode. */
   inode = inode_open (e.inode_sector);
   if (inode == NULL)
     goto done;
-
+printf("begin check in use: %s\n", name);
   // 不能关掉正在用的文件夹
   if (inode_is_dir (inode))
     {
@@ -288,13 +288,14 @@ dir_remove (struct dir *dir, const char *name)
       if (!empty)
         goto done;
     }
-
+printf("begin erase: %s\n", name);
 
   /* Erase directory entry. */
   e.in_use = false;
   if (inode_write_at (dir->inode, &e, sizeof e, ofs) != sizeof e)
     goto done;
 
+  printf("dir_remove: %s\n", name);
   /* Remove inode. */
   inode_remove (inode);
   success = true;

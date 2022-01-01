@@ -148,7 +148,9 @@ filesys_remove (const char *name)
       goto filesys_remove_error;
     }
   struct dir *dir = dir_open_path (directory);
+  printf ("%s:%d, %s, %s\n", __FILE__, __LINE__, name, filename);
   success = dir != NULL && dir_remove (dir, filename);
+  printf("%s:%d, %s %d\n", __FILE__, __LINE__, name, success);
   dir_close (dir);
 filesys_remove_error:
   free (directory);
