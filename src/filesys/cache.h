@@ -15,7 +15,4 @@ inline void cache_read_block (block_sector_t sector, void *buffer)
   cache_read_at (sector, buffer, 0, BLOCK_SECTOR_SIZE);
 }
 
-uint8_t *cache_access_begin (block_sector_t);
-void cache_access_end (block_sector_t);
-
 void cache_writeback(void);

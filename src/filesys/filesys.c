@@ -8,6 +8,7 @@
 #include "filesys/inode.h"
 #include "filesys/directory.h"
 #include "threads/thread.h"
+#include "threads/malloc.h"
 /* Partition that contains the file system. */
 struct block *fs_device;
 
@@ -221,7 +222,7 @@ parse_path (const char *path, char *directory, char *name)
   char *token, *save_ptr;
   struct inode *prev_inode = NULL;
 
-  *name = "";
+  *name = '\0';
   char *ret = directory;
 
   if (strlen (path) == 0)
