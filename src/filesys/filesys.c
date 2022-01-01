@@ -2,6 +2,7 @@
 #include <debug.h>
 #include <stdio.h>
 #include <string.h>
+#include "devices/timer.h"
 #include "filesys/cache.h"
 #include "filesys/file.h"
 #include "filesys/free-map.h"
@@ -38,6 +39,8 @@ filesys_init (bool format)
 void
 filesys_done (void)
 {
+  filesys_closing = true;
+  timer_sleep(TIMER_FREQ);
   cache_writeback ();
   free_map_close ();
 }
@@ -148,9 +151,9 @@ filesys_remove (const char *name)
       goto filesys_remove_error;
     }
   struct dir *dir = dir_open_path (directory);
-  printf ("%s:%d, %s, %s\n", __FILE__, __LINE__, name, filename);
+  //printf ("%s:%d, %s, %s\n", __FILE__, __LINE__, name, filename);
   success = dir != NULL && dir_remove (dir, filename);
-  printf("%s:%d, %s %d\n", __FILE__, __LINE__, name, success);
+  //printf("%s:%d, %s %d\n", __FILE__, __LINE__, name, success);
   dir_close (dir);
 filesys_remove_error:
   free (directory);
@@ -205,12 +208,12 @@ filesys_mkdir_error:
 static void
 do_format (void)
 {
-  printf ("Formatting file system...");
+  //printf ("Formatting file system...");
   free_map_create ();
   if (!dir_create (ROOT_DIR_SECTOR, 16))
     PANIC ("root directory creation failed");
   free_map_close ();
-  printf ("done.\n");
+  //printf ("done.\n");
 }
 
 /* 首先从 root 一层层进行递归， 通过 strtok 来不断的拆文件夹名 */

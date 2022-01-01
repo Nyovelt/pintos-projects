@@ -1,7 +1,12 @@
 #include "devices/block.h"
 #include "filesys/off_t.h"
+#include "stdbool.h"
+#include "threads/synch.h"
 
 void cache_init (void);
+
+bool filesys_closing;
+struct semaphore read_ahead_sema;
 
 void cache_write_at (block_sector_t, const void *, off_t offset, size_t bytes);
 inline void cache_write_block (block_sector_t sector, const void *buffer)
