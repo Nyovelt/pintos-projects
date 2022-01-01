@@ -72,6 +72,7 @@ dir_open_path (const char *path)
   if (path[0] != '/')
     if (thread_current ()->cwd != NULL)
       {
+        dir_close (dir);
         // /printf ("%s:%d: The CWD works\n", __FILE__, __LINE__);
         dir = dir_reopen (thread_current ()->cwd);
         if (dir == NULL)
@@ -264,19 +265,19 @@ dir_remove (struct dir *dir, const char *name)
   /* Find directory entry. */
   if (!lookup (dir, name, &e, &ofs))
     goto done;
-printf("begin open: %s\n", name);
+  //printf ("begin open: %s\n", name);
   /* Open inode. */
   inode = inode_open (e.inode_sector);
   if (inode == NULL)
     goto done;
-printf("begin check in use: %s\n", name);
+  //printf ("begin check in use: %s\n", name);
   // 不能关掉正在用的文件夹
   if (inode_is_dir (inode))
     {
       bool empty = true;
       off_t ofs = sizeof (e);
-      struct dir *dir = dir_open (inode);
-      while (inode_read_at (dir->inode, &e, sizeof (e), ofs) == sizeof (e))
+      struct dir *dir_ = dir_open (inode);
+      while (inode_read_at (dir_->inode, &e, sizeof (e), ofs) == sizeof (e))
         {
           if (e.in_use && strcmp (e.name, ".") && strcmp (e.name, ".."))
             {
@@ -285,21 +286,21 @@ printf("begin check in use: %s\n", name);
             }
           ofs += sizeof (e);
         }
+      dir_close (dir_);
       if (!empty)
         goto done;
     }
-printf("begin erase: %s\n", name);
+  //printf ("begin erase: %s\n", name);
 
   /* Erase directory entry. */
   e.in_use = false;
   if (inode_write_at (dir->inode, &e, sizeof e, ofs) != sizeof e)
     goto done;
 
-  printf("dir_remove: %s\n", name);
+  // ("dir_remove: %s\n", name);
   /* Remove inode. */
   inode_remove (inode);
   success = true;
-
 done:
   inode_close (inode);
   return success;

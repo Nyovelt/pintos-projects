@@ -54,7 +54,7 @@ cache_init ()
 void
 cache_writeback ()
 {
-  lock_acquire(&global_lock);
+  lock_acquire (&global_lock);
   for (int i = 0; i < BUF_SIZE; i++)
     {
       if (!cache[i].valid)
@@ -68,14 +68,14 @@ cache_writeback ()
           //rwlock_end_write(&cache[i].rwlock);
         }
     }
-  lock_release(&global_lock);
+  lock_release (&global_lock);
 }
 
 void
 cache_write_at (block_sector_t sector, const void *buffer, off_t offset,
                 size_t bytes)
 {
-/*acquire:
+  /*acquire:
   lock_acquire (&global_lock);
   struct cache_entry *ce = cache_find (sector);
   lock_release (&global_lock);
@@ -104,7 +104,7 @@ cache_write_at (block_sector_t sector, const void *buffer, off_t offset,
 void
 cache_read_at (block_sector_t sector, void *buffer, off_t offset, size_t bytes)
 {
-/*acquire:
+  /*acquire:
   lock_acquire (&global_lock);
   struct cache_entry *ce = cache_find (sector);
   lock_release (&global_lock);
@@ -166,7 +166,7 @@ cache_insert (block_sector_t sector)
   ce = cache + clock_hand;
   int cnt = 0;
   while (ce->used || (cnt < BUF_SIZE && ce->dirty))
-          //|| !rwlock_try_write (&ce->rwlock))
+    //|| !rwlock_try_write (&ce->rwlock))
     {
       ce->used = false;
       clock_hand++;
@@ -186,4 +186,16 @@ cache_insert (block_sector_t sector)
   block_read (fs_device, sector, ce->data);
   //rwlock_end_write (&ce->rwlock);
   return ce;
+}
+
+void
+cache_write_block (block_sector_t sector, const void *buffer)
+{
+  cache_write_at (sector, buffer, 0, BLOCK_SECTOR_SIZE);
+}
+
+void
+cache_read_block (block_sector_t sector, void *buffer)
+{
+  cache_read_at (sector, buffer, 0, BLOCK_SECTOR_SIZE);
 }

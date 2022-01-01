@@ -99,7 +99,7 @@ ext_free_map_release (struct inode_disk *disk_inode)
   off_t num_sectors = bytes_to_sectors (disk_inode->length);
 
   off_t num_direct = (num_sectors < NUM_DIRECT) ? num_sectors : NUM_DIRECT;
-  printf("to dealloc: %d, length=%d\n", num_direct, disk_inode->length);
+  //printf ("to dealloc: %d, length=%d\n", num_direct, disk_inode->length);
   release_direct (disk_inode->direct, num_direct);
 
   off_t num_indirect = num_sectors - num_direct;
@@ -137,7 +137,7 @@ byte_to_sector (const struct inode *inode, off_t pos)
       if (sector_pos < PTRS_PER_SECTOR)
         {
           struct indir_block indir;
-          cache_read_block(inode->data.indirect, &indir);
+          cache_read_block (inode->data.indirect, &indir);
           sector_id = indir.blocks[sector_pos];
 
           return sector_id;
@@ -146,16 +146,17 @@ byte_to_sector (const struct inode *inode, off_t pos)
         {
           sector_pos -= PTRS_PER_SECTOR;
           if (sector_pos >= PTRS_PER_SECTOR * PTRS_PER_SECTOR)
-            return sector_id;;
+            return sector_id;
+          ;
 
           int indir_sector_pos = sector_pos / PTRS_PER_SECTOR;
           int dbl_indir_sector_pos = sector_pos % PTRS_PER_SECTOR;
 
           struct indir_block dbl_indir;
-          cache_read_block(inode->data.double_indirect, &dbl_indir);
+          cache_read_block (inode->data.double_indirect, &dbl_indir);
           block_sector_t indir_sector_id = dbl_indir.blocks[indir_sector_pos];
           struct indir_block indir;
-          cache_read_block(indir_sector_id, &indir);
+          cache_read_block (indir_sector_id, &indir);
           sector_id = indir.blocks[dbl_indir_sector_pos];
 
           return sector_id;
@@ -234,7 +235,7 @@ inode_open (block_sector_t sector)
       inode = list_entry (e, struct inode, elem);
       if (inode->sector == sector)
         {
-          printf ("already open\n");
+          //printf ("already open\n");
           inode_reopen (inode);
 
           return inode;
@@ -243,10 +244,10 @@ inode_open (block_sector_t sector)
 
   /* Allocate memory. */
   inode = malloc (sizeof *inode);
-  printf("malloc: %p\n", inode);
+  // printf ("malloc: %p\n", inode); // DEBUG_INODE
   if (inode == NULL)
     return NULL;
-  printf("inode_open\n");
+  // printf ("inode_open\n"); // DEBUG_INODE
 
   /* Initialize. */
 
@@ -300,14 +301,14 @@ inode_close (struct inode *inode)
           /*off_t length = disk_inode->length;
           block_sector_t start = disk_inode->start;*/
           //printf("FREE: sector=%d", inode->sector);
-          printf("release block %d\n", inode->sector);
+          //printf ("release block %d\n", inode->sector);
           free_map_release (inode->sector, 1);
           ext_free_map_release (&inode->data);
-          printf("release end %d\n", inode->sector);
+          //printf ("release end %d\n", inode->sector);
           /*free_map_release (start,
                             bytes_to_sectors (length));*/
         }
-      printf("free inode %p\n", inode);
+      // printf ("free inode %p\n", inode); // DEBUG_INODE
       free (inode);
     }
 }
@@ -506,11 +507,11 @@ allocate_direct (off_t num_direct, block_sector_t *direct_blocks)
       if (direct_blocks[i] == 0)
         {
           if (!free_map_allocate (1, direct_blocks + i))
-          {
-            printf("direct allocate false\n");
-            return false;
-          }
-          printf ("direct block allocated: %d\n", direct_blocks[i]);
+            {
+              //printf ("direct allocate false\n");
+              return false;
+            }
+          // printf ("direct block allocated: %d\n", direct_blocks[i]);
           cache_write_block (direct_blocks[i], zeros);
         }
     }
@@ -536,7 +537,7 @@ allocate_indirect (off_t num_indirect, block_sector_t *indirectp)
           free (indir);
           return false;
         }
-      printf ("indirect block allocated: %d\n", *indirectp);
+      // printf ("indirect block allocated: %d\n", *indirectp);
     }
   else
     cache_read_block (*indirectp, indir);
@@ -569,11 +570,11 @@ allocate_double_indirect (off_t num_double_indirect,
   if (*double_indirectp == 0)
     {
       if (!allocate_direct (1, double_indirectp))
-      {
-        free (dbl_indir);
-        return false;
-      }
-     printf ("double indirect block allocated: %d\n", *double_indirectp);
+        {
+          free (dbl_indir);
+          return false;
+        }
+      // printf ("double indirect block allocated: %d\n", *double_indirectp);
     }
   else
     cache_read_block (*double_indirectp, dbl_indir);
@@ -585,10 +586,10 @@ allocate_double_indirect (off_t num_double_indirect,
                                 ? num_double_indirect
                                 : PTRS_PER_SECTOR;
       if (!allocate_indirect (num_allocated, dbl_indir->blocks + i))
-      {
-        free (dbl_indir);
-        return false;
-      }
+        {
+          free (dbl_indir);
+          return false;
+        }
       num_indirect -= num_allocated;
     }
 
@@ -603,10 +604,10 @@ release_direct (block_sector_t *direct_blocks, off_t num_direct)
 {
   for (int i = 0; i < num_direct; i++)
     {
-      printf("begin release direct at %d, sector %d\n", i, direct_blocks[i]);
+      //printf ("begin release direct at %d, sector %d\n", i, direct_blocks[i]);
       ASSERT (direct_blocks[i] != 0)
       free_map_release (direct_blocks[i], 1);
-      printf("end release direct at %d, sector %d\n", i, direct_blocks[i]);
+      //printf ("end release direct at %d, sector %d\n", i, direct_blocks[i]);
     }
 }
 
@@ -617,7 +618,7 @@ release_indirect (block_sector_t indirect, off_t num_indirect)
     return;
 
   struct indir_block indir;
-  cache_read_block(indirect, &indir);
+  cache_read_block (indirect, &indir);
   //printf("begin release direct from indir\n");
   release_direct (indir.blocks, num_indirect);
   free_map_release (indirect, 1);
@@ -633,7 +634,7 @@ release_double_indirect (block_sector_t double_indirect,
 
   off_t num_indirect = DIV_ROUND_UP (num_double_indirect, PTRS_PER_SECTOR);
   struct indir_block dbl_indir;
-  cache_read_block(double_indirect, &dbl_indir);
+  cache_read_block (double_indirect, &dbl_indir);
 
   for (int i = 0; i < num_indirect; i++)
     {
@@ -683,6 +684,7 @@ inode_init_dir (struct inode *inode, struct dir *par_dir)
     }
   else
     {
+      ASSERT (par_dir != NULL);
       success
           = dir_add (dir, "..", inode_get_inumber (dir_get_inode (par_dir)));
     }
