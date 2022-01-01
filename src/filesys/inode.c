@@ -593,7 +593,7 @@ allocate_double_indirect (off_t num_double_indirect,
       num_indirect -= num_allocated;
     }
 
-  ASSERT (num_indirect == 0);
+  // ASSERT (num_indirect == 0);
   cache_write_block (*double_indirectp, dbl_indir);
   free (dbl_indir);
   return true;
