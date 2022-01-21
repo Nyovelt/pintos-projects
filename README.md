@@ -7,7 +7,7 @@ Author:
 
 I will write a small report to generize the PintOS project later on my blog. Should you have any questions, contact me.
 
-Academic Honesty
+**Remind of Academic Honesty**
 
 ## Proj1
 ```Shell
